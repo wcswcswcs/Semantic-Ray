@@ -4,7 +4,7 @@ from sklearn.metrics import confusion_matrix
 import torch
 from skimage.io import imsave
 from imgviz import label_colormap
-
+import wandb
 from network.loss import Loss
 from utils.base_utils import color_map_backward
 from skimage.metrics import structural_similarity
@@ -120,6 +120,8 @@ class VisualizeImage(Loss):
 
         data_index = kwargs['data_index']
         model_name = kwargs['model_name']
+        wandb.log({
+            "VisualizeImage": [wandb.Image(im,caption=f'{model_name}/step-{step}-index-{data_index}') for im in imgs]})
         Path(f'data/vis/{model_name}').mkdir(exist_ok=True, parents=True)
         if h <= 64 and w <= 64:
             imsave(
@@ -155,7 +157,8 @@ class VisualizeSemantic(Loss):
             rgbs = rgbs.squeeze().cpu().numpy()
             rgbs = self.color_map[rgbs]
             return rgbs
-
+        wandb.log({
+            "VisualizeSemantic": [wandb.Image(im,caption=f'{model_name}/step-{step}-index-{data_index}-sem') for im in imgs]})
         outputs = {}
         imgs = [get_img('pixel_label_gt', 1), get_img('pixel_label_nr', self.num_classes + 1)]
         if 'pixel_label_dr' in data_pr:
