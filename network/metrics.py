@@ -157,8 +157,7 @@ class VisualizeSemantic(Loss):
             rgbs = rgbs.squeeze().cpu().numpy()
             rgbs = self.color_map[rgbs]
             return rgbs
-        wandb.log({
-            "VisualizeSemantic": [wandb.Image(im,caption=f'{model_name}/step-{step}-index-{data_index}-sem') for im in imgs]})
+        
         outputs = {}
         imgs = [get_img('pixel_label_gt', 1), get_img('pixel_label_nr', self.num_classes + 1)]
         if 'pixel_label_dr' in data_pr:
@@ -167,9 +166,11 @@ class VisualizeSemantic(Loss):
             imgs.append(get_img('pixel_label_nr_fine', self.num_classes + 1))
         if 'pixel_label_dr_fine' in data_pr:
             imgs.append(get_img('pixel_label_dr_fine', self.num_classes + 1))
-
+        
         data_index = kwargs['data_index']
         model_name = kwargs['model_name']
+        wandb.log({
+            "VisualizeSemantic": [wandb.Image(im,caption=f'{model_name}/step-{step}-index-{data_index}-sem') for im in imgs]})
         Path(f'data/vis/{model_name}').mkdir(exist_ok=True, parents=True)
         imsave(f'data/vis/{model_name}/step-{step}-index-{data_index}-sem.png', concat_images_list(*imgs))
         return outputs
