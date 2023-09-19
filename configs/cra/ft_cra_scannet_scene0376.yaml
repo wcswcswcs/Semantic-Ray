@@ -1,6 +1,7 @@
 name: ft_cra_scannet_scene0376
 
 # network
+
 init_net_type: depth
 use_hierarchical_sampling: true
 use_depth_loss: false
@@ -13,6 +14,7 @@ render_label: true
 num_classes: 20
 ignore_label: 20
 agg_net_cfg: {
+  network_name: CRANet,
   label_hidden: [16],
   num_classes: 20,
   use_ptrans: true,

@@ -110,9 +110,9 @@ class Trainer:
     def __init__(self, cfg):
         self.cfg = {**self.default_cfg, **cfg}
         self.model_name = cfg['name']
-        self.model_dir = os.path.join('data/model', cfg['name'])
+        self.model_dir = os.path.join('weights', cfg['name'])
         if not os.path.exists(self.model_dir):
-            os.mkdir(self.model_dir)
+            os.makedirs(self.model_dir,exist_ok=True)
         
         self.pth_fn = os.path.join(self.model_dir, 'model.pth')
         self.best_pth_fn = os.path.join(self.model_dir, 'model_best.pth')
@@ -202,6 +202,7 @@ class Trainer:
             del loss, log_info
 
         pbar.close()
+        self.run.finish()
         
     def eval(self, model_path):
         self._init_dataset()
@@ -257,7 +258,8 @@ class Trainer:
         }, save_fn)
 
     def _init_logger(self):
-        self.logger = Logger(self.model_dir)
+        self.logger = Logger(self.model_dir,self.cfg)
+        self.run = self.logger.run
 
     def _log_data(self, results, step, prefix='train', verbose=False):
         log_results = {}

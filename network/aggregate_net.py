@@ -1,7 +1,7 @@
 import torch
 import torch.nn as nn
 
-from network.cranet import IBRNetWithNeuRay, CRANet
+from network.cranet import *
 
 
 def get_dir_diff(prj_dir, que_dir):
@@ -40,13 +40,14 @@ class SemanticAggregationNet(nn.Module):
         super().__init__()
         self.cfg = {**self.default_cfg, **cfg}
         dim = self.cfg['neuray_dim']
-        self.agg_impl = CRANet(
+        self.agg_impl = name2network[self.cfg['network_name']](
             dim,
             n_samples=self.cfg['sample_num'],
             num_classes=self.cfg['num_classes'],
             use_ptrans=self.cfg['use_ptrans'],
             ptrans_first=self.cfg['ptrans_first'],
             sem_only=self.cfg['sem_only'],
+            color_cal_type = self.cfg['color_cal_type'],
         )
         self.prob_embed = nn.Sequential(
             nn.Linear(2+32, dim),

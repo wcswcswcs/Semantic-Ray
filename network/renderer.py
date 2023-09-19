@@ -43,7 +43,8 @@ class BaseRenderer(nn.Module):
 
     def __init__(self, cfg):
         super().__init__()
-        self.cfg = {**self.base_cfg, **cfg}
+        self.cfg = {**self.base_cfg}
+        self.cfg.update(cfg)
         self.vis_encoder = name2vis_encoder[self.cfg['vis_encoder_type']](
             self.cfg['vis_encoder_cfg'])
         self.dist_decoder = name2dist_decoder[self.cfg['dist_decoder_type']](

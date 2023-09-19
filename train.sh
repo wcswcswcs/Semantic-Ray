@@ -1,0 +1,1 @@
+CUDA_VISIBLE_DEVICES=0 python run_training.py --cfg configs/cra/train_crav1_scannet.yaml

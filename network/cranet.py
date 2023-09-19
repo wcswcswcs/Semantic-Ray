@@ -2,7 +2,7 @@ import numpy as np
 import torch.nn.functional as F
 import torch.nn as nn
 import torch
-
+from einops import rearrange, reduce, repeat
 
 class ScaledDotProductAttention(nn.Module):
     ''' Scaled Dot-Product Attention '''
@@ -296,6 +296,8 @@ class IBRNetWithNeuRay(nn.Module):
                                     nn.Linear(16, 8),
                                     activation_func,
                                     nn.Linear(8, 1))
+        
+        
 
         self.neuray_fc = nn.Sequential(
             nn.Linear(neuray_in_dim, 8,),
@@ -545,3 +547,185 @@ class CRANet(IBRNetWithNeuRay):
         sem_feat = torch.sum(sem_feat * blending_weights_valid, dim=2)
         out = torch.cat([rgb_out, sigma_out, sem_feat], dim=-1)
         return out
+
+
+class CRANet_v1(IBRNetWithNeuRay):
+    def __init__(self,
+                 neuray_in_dim=32,
+                 in_feat_ch=32,
+                 n_samples=64,
+                 num_classes=20,
+                 use_ptrans=False,
+                 ptrans_first=False,
+                 sem_only=False,
+                 label_hidden=[],
+                 color_cal_type='rgb_in',
+                 **kwargs):
+        super().__init__(
+            neuray_in_dim=neuray_in_dim,
+            in_feat_ch=in_feat_ch,
+            n_samples=n_samples,
+            **kwargs
+        )
+        self.color_cal_type = color_cal_type
+        if len(label_hidden) > 0:
+            self.semantic_fc = nn.Sequential()
+            for i in range(len(label_hidden)):
+                self.semantic_fc.add_module(
+                    "fc{}".format(i),
+                    nn.Linear(label_hidden[i-1] if i > 0 else 16,label_hidden[i])
+                )
+            # The output of the last layer is semantic logits
+            self.semantic_fc.add_module(
+                "fc{}".format(len(label_hidden)),
+                nn.Linear(label_hidden[-1], num_classes + 1)  # +1 for invalid
+            )
+        else:
+            self.semantic_fc = None
+            
+        self.use_ptrans = use_ptrans
+        self.ptrans_first = ptrans_first
+        self.sem_only = sem_only
+        if use_ptrans:
+            self.point_attention_new = MultiHeadAttention(4, 32, 4, 4)
+            self.sem_rtrans_new = MultiHeadAttention(4, 32, 4, 4)
+        self.sem_pos_encoding = self.posenc(32, n_samples=n_samples)
+        self.semantic_fc1_new = nn.Linear(16, 16)
+        self.semantic_fc2_new = nn.Linear(64, num_classes + 1)
+        self.relu = nn.ReLU()
+
+        if self.color_cal_type != 'rgb_in':
+            self.rgb_out = nn.Sequential(nn.Linear(32+1+4, 32),
+                                        nn.ELU(inplace=True),
+                                        nn.Dropout(0.2),
+                                        nn.Linear(32, 16),
+                                        nn.ELU(inplace=True),
+                                        nn.Dropout(0.2),
+                                        nn.Linear(16, 3),
+                                        nn.Sigmoid())
+
+        
+        
+    def forward(self, rgb_feat, neuray_feat, ray_diff, mask, ref_sem_feats=None):
+        '''
+        :param rgb_feat: rgbs and image features [n_rays, n_samples, n_views, n_feat]
+        :param ray_diff: ray direction difference [n_rays, n_samples, n_views, 4], first 3 channels are directions,
+        last channel is inner product
+        :param mask: mask for whether each projection is valid or not. [n_rays, n_samples, n_views, 1]
+        :return: rgb and density output, [n_rays, n_samples, 4]
+        '''
+
+        num_views = rgb_feat.shape[2]
+        direction_feat = self.ray_dir_fc(ray_diff)
+        rgb_in = rgb_feat[..., :3]
+        rgb_feat = rgb_feat + direction_feat
+        if self.anti_alias_pooling:
+            _, dot_prod = torch.split(ray_diff, [3, 1], dim=-1)
+            exp_dot_prod = torch.exp(torch.abs(self.s) * (dot_prod - 1))
+            weight = (exp_dot_prod - torch.min(exp_dot_prod,
+                      dim=2, keepdim=True)[0]) * mask
+            # means it will trust the one more with more consistent view point
+            weight = weight / (torch.sum(weight, dim=2, keepdim=True) + 1e-8)
+        else:
+            weight = mask / (torch.sum(mask, dim=2, keepdim=True) + 1e-8)
+        num_valid_obs = torch.sum(mask, dim=2)
+        # neuray layer 0
+        weight0 = torch.sigmoid(self.neuray_fc(
+            neuray_feat)) * weight  # [rn,dn,rfn,f]
+        # [n_rays, n_samples, 1, n_feat]
+        mean0, var0 = fused_mean_variance(rgb_feat, weight0)
+        # [n_rays, n_samples, 1, n_feat]
+        mean1, var1 = fused_mean_variance(rgb_feat, weight)
+        # [n_rays, n_samples, 1, 2*n_feat]
+        globalfeat = torch.cat([mean0, var0, mean1, var1], dim=-1)
+
+        # [n_rays, n_samples, n_views, 3*n_feat]
+        x = torch.cat([globalfeat.expand(-1, -1, num_views, -1),
+                      rgb_feat, neuray_feat], dim=-1)
+        x = self.base_fc(x)
+        sem_latent = x
+        
+        if self.use_ptrans and self.ptrans_first:
+            # ptrans
+            b, n, v, f = sem_latent.shape
+            sem_latent = sem_latent.reshape(-1, num_views, f)
+            sem_latent, _ = self.point_attention_new(
+                sem_latent, sem_latent, sem_latent, mask=mask.reshape(-1, num_views, 1).float())
+            sem_latent = sem_latent.reshape(b, n, v, f)
+            # rtrans
+            sem_latent = sem_latent.permute(0, 2, 1, 3).reshape(-1, n, f)
+            trans_mask = num_valid_obs.unsqueeze(1).expand(-1, num_views, -1, -1).reshape(b * v, n, 1)
+            trans_mask = (trans_mask > 1).float()
+            sem_latent = sem_latent + self.sem_pos_encoding
+            sem_latent, _ = self.sem_rtrans_new(
+                sem_latent, sem_latent, sem_latent, mask=trans_mask)
+            sem_latent = sem_latent.reshape(b, v, n, f).permute(0, 2, 1, 3)
+        elif self.use_ptrans and not self.ptrans_first:
+            # rtrans
+            b, n, v, f = sem_latent.shape
+            sem_latent = sem_latent.permute(0, 2, 1, 3).reshape(-1, n, f)
+            trans_mask = num_valid_obs.unsqueeze(1).expand(-1, num_views, -1, -1).reshape(b * v, n, 1)
+            trans_mask = (trans_mask > 1).float()
+            sem_latent = sem_latent + self.sem_pos_encoding
+            sem_latent, _ = self.sem_rtrans_new(
+                sem_latent, sem_latent, sem_latent, mask=trans_mask)
+            sem_latent = sem_latent.reshape(b, v, n, f).permute(0, 2, 1, 3)
+            # ptrans
+            sem_latent = sem_latent.reshape(-1, num_views, f)
+            sem_latent, _ = self.point_attention_new(
+                sem_latent, sem_latent, sem_latent, mask=mask.reshape(-1, num_views, 1).float())
+            sem_latent = sem_latent.reshape(b, n, v, f)
+        
+        x_vis = self.vis_fc(sem_latent * weight)
+        x_res, vis = torch.split(x_vis, [x_vis.shape[-1]-1, 1], dim=-1)
+        vis = torch.sigmoid(vis) * mask
+        x = sem_latent + x_res
+        vis = self.vis_fc2(x * vis) * mask
+        weight = vis / (torch.sum(vis, dim=2, keepdim=True) + 1e-8)
+
+        mean, var = fused_mean_variance(x, weight)
+        globalfeat = torch.cat([mean.squeeze(2), var.squeeze(
+            2), weight.mean(dim=2)], dim=-1)  # [n_rays, n_samples, 32*2+1]
+        globalfeat = self.geometry_fc(globalfeat)  # [n_rays, n_samples, 16]
+        
+        globalfeat = globalfeat + self.pos_encoding
+        globalfeat, _ = self.ray_attention(globalfeat, globalfeat, globalfeat,
+                                           mask=(num_valid_obs > 1).float())  # [n_rays, n_samples, 16]
+        sigma = self.out_geometry_fc(globalfeat)  # [n_rays, n_samples, 1]
+        # set the sigma of invalid point to zero
+        sigma_out = sigma.masked_fill(num_valid_obs < 1, 0.)
+
+        x_ = torch.cat([x, vis, ray_diff], dim=-1)
+        x = self.rgb_fc(x_)
+        x = x.masked_fill(mask == 0, -1e9)
+        blending_weights_valid = F.softmax(x, dim=2)  # color blending
+        # rgb computation
+        if self.color_cal_type == 'rgb_in':
+            rgb_out = torch.sum(rgb_in*blending_weights_valid, dim=2)
+        elif self.color_cal_type == 'feat_pred':
+            x_ = self.rgb_out(x_) 
+            rgb_out = torch.sum(x_*blending_weights_valid, dim=2)
+
+        # semantic feature
+        
+        sem_global = self.semantic_fc1_new(globalfeat)
+        sigma_feat = self.out_geometry_fc[0](globalfeat)
+        sigma_feat = self.out_geometry_fc[1](sigma_feat)
+        sem_feat = torch.cat([
+            sem_global.unsqueeze(2).expand(-1, -1, num_views, -1),
+            sigma_feat.unsqueeze(2).expand(-1, -1, num_views, -1),
+            sem_latent
+        ], dim=-1)
+        sem_feat = self.semantic_fc2_new(sem_feat)
+        sem_feat = torch.sum(sem_feat * blending_weights_valid, dim=2)
+        out = torch.cat([rgb_out, sigma_out, sem_feat], dim=-1)
+        return out
+
+
+name2network = {
+    'CRANet':CRANet,
+    'CRANet_v1':CRANet_v1,
+    'IBRNet':IBRNet,
+    'IBRNetWithNeuRay':IBRNetWithNeuRay,
+
+}

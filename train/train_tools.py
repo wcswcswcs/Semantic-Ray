@@ -4,9 +4,10 @@ from collections import OrderedDict
 
 import torch
 from torch.utils.tensorboard import SummaryWriter
+import wandb
 import numpy as np
 import torch.nn as nn
-
+from datetime import datetime
 
 def load_model(model, optim, model_dir, epoch=-1):
     if not os.path.exists(model_dir):
@@ -59,6 +60,12 @@ class Recorder(object):
         self.rec_dir = rec_dir
         self.rec_fn = rec_fn
         self.data = OrderedDict()
+        # run = wandb.init(project="sray", config=config.to_dict())  
+        # if hasattr(config,"run_name"):
+        #     run.name = config.run_name
+        # else:
+        #     run.name = 'mono-nerf-{}'.format(datetime.now().strftime('%Y-%m-%d_%H-%M-%S'))
+        #     config.run_name = run.name
         self.writer = SummaryWriter(log_dir=rec_dir)
 
     def rec_loss(self, losses_batch, step, epoch, prefix='train', dump=False):
@@ -92,13 +99,20 @@ class Recorder(object):
 
 
 class Logger:
-    def __init__(self, log_dir):
+    def __init__(self, log_dir,cfg):
         self.log_dir=log_dir
         self.head_train = ['step']
         self.msgs_train = []
         self.head_valid = ['step']
         self.msgs_valid = []
+        self.cfg = cfg
         self.writer = SummaryWriter(log_dir=log_dir)
+        self.run = wandb.init(project="sray", config=self.cfg)  
+        if "run_name" in cfg.keys():
+            self.run.name = cfg.run_name
+        else:
+            self.run.name = 'mono-nerf-{}'.format(datetime.now().strftime('%Y-%m-%d_%H-%M-%S'))
+            self.cfg['run_name'] = self.run.name
 
     def log(self,data, prefix='train',step=None,verbose=False):
         if prefix == 'train':
@@ -109,6 +123,7 @@ class Logger:
                 msg[k] = v
                 self.writer.add_scalar(f'{prefix}/{k}',v,step)
             self.msgs_train.append(msg)
+            wandb.log(msg)
             if verbose:
                 print(msg)
             with open(os.path.join(self.log_dir,f'{prefix}.csv'), 'w') as f:
