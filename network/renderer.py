@@ -4,7 +4,7 @@ import torch.nn as nn
 from network.aggregate_net import name2agg_net
 from network.dist_decoder import name2dist_decoder
 from network.init_net import name2init_net
-from network.ops import ResUNetLight
+from network.ops import ResUNetLight,upconv
 from network.vis_encoder import name2vis_encoder
 from network.render_ops import *
 
@@ -50,6 +50,12 @@ class BaseRenderer(nn.Module):
         self.dist_decoder = name2dist_decoder[self.cfg['dist_decoder_type']](
             self.cfg['dist_decoder_cfg'])
         self.image_encoder = ResUNetLight(3, [1, 2, 6, 4], 32, inplanes=16)
+        self.sem_head_2d =nn.Sequential(
+            upconv(32,64,3,4),
+            nn.SiLU(),
+            nn.Conv2d(64,cfg['num_classes']+1,stride=1,kernel_size=1)
+        ) 
+        
         self.agg_net = name2agg_net[self.cfg['agg_net_type']](
             self.cfg['agg_net_cfg'])
         if self.cfg['use_hierarchical_sampling']:
@@ -244,6 +250,7 @@ class BaseRenderer(nn.Module):
 
     def render(self, que_imgs_info, ref_imgs_info, is_train):
         ref_img_feats = self.image_encoder(ref_imgs_info['imgs'])
+        # ref_sem_pred = self.sem_head_2d(ref_img_feats)
         ref_imgs_info['img_feats'] = ref_img_feats
         ref_imgs_info['ray_feats'] = self.vis_encoder(
             ref_imgs_info['ray_feats'], ref_img_feats)
@@ -271,6 +278,8 @@ class BaseRenderer(nn.Module):
 
         for k, v in render_info_all.items():
             render_info_all[k] = torch.cat(v, 1)
+
+        # render_info['ref_sem_pred'] = ref_sem_pred
 
         return render_info_all
 
@@ -361,4 +370,5 @@ class Renderer(BaseRenderer):
         if (self.cfg['use_depth_loss'] and 'true_depth' in ref_imgs_info) or (not is_train):
             render_outputs.update(
                 self.predict_mean_for_depth_loss(ref_imgs_info))
+        render_outputs['ref_sem_pred'] = self.sem_head_2d(ref_imgs_info['img_feats'])
         return render_outputs

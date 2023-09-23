@@ -212,9 +212,9 @@ class ResUNetLight(nn.Module):
         return x
 
     def forward(self, x):                       # x: [B, 3, H, W]
-        x = self.relu(self.bn1(self.conv1(x)))  # x: [B, 32, H/2, W/2]
+        x0 = self.relu(self.bn1(self.conv1(x)))  # x: [B, 32, H/2, W/2]
 
-        x1 = self.layer1(x)                     # x1: [B, 32, H/4, W/4]
+        x1 = self.layer1(x0)                     # x1: [B, 32, H/4, W/4]
         x2 = self.layer2(x1)                    # x2: [B, 64, H/8, W/8]
         x3 = self.layer3(x2)                    # x3: [B, 128, H/16, W/16]
 

@@ -1,4 +1,4 @@
-name: test
+name: cra-2-with-2d-smeantic-loss
 project_name: sray
 
 # network
@@ -47,7 +47,7 @@ use_nr_fine_loss: true
 # lr
 # load_pretrain: data/model/neuray_gen_depth/model_best.pth
 total_step: 600000
-val_interval: 100
+val_interval: 5000
 save_interval: 5000
 lr_type: exp_decay
 optimizer_type: adam
@@ -56,7 +56,7 @@ lr_cfg:
   scale_new: 1.0
   lr_init: 1.0e-3
   decay_step: 5000
-  decay_rate: 0.2
+  decay_rate: 0.5
   lr_min: 5.0e-5
   optim_args: {weight_decay: 1.0e-5}
 

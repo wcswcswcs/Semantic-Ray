@@ -111,7 +111,7 @@ class Logger:
         if "run_name" in cfg.keys():
             self.run.name = cfg.run_name
         else:
-            self.run.name = 'sray-{}'.format(datetime.now().strftime('%Y-%m-%d_%H-%M-%S'))
+            self.run.name = f"sray-{cfg['name']}-{datetime.now().strftime('%Y-%m-%d_%H-%M-%S')}"
             self.cfg['run_name'] = self.run.name
 
     def log(self,data, prefix='train',step=None,verbose=False):

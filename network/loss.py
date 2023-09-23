@@ -147,13 +147,16 @@ class SemanticLoss(Loss):
             fine_loss = torch.zeros_like(coarse_loss)
         
         loss = (coarse_loss + fine_loss) * self.cfg['semantic_loss_scale']
-        
-        if 'pred_labels' in data_pr:
-            ref_labels_pr = data_pr['pred_labels'].permute(0, 2, 3, 1)
+        ret ={'loss_semantic': loss}
+        if 'ref_sem_pred' in data_pr:
+            ref_labels_pr = data_pr['ref_sem_pred'].permute(0, 2, 3, 1)
             ref_labels_gt = data_gt['ref_imgs_info']['labels'].permute(0, 2, 3, 1)
             ref_loss = compute_loss(ref_labels_pr, ref_labels_gt)
-            loss += ref_loss * self.cfg['semantic_loss_scale']
-        return {'loss_semantic': loss}
+            loss_2d = ref_loss * self.cfg['semantic_loss_2d_scale']
+            ret.update({
+                'loss_semantic_2d':loss_2d
+            })
+        return ret
 
 
 name2loss = {
