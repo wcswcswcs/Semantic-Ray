@@ -34,7 +34,7 @@ fine_agg_net_cfg: {
 }
 
 # loss
-loss: [render, semantic]
+loss: [render]
 render_loss_scale: 0.75
 semantic_loss_scale: 0.25
 semantic_loss_2d_scale: 0.25
