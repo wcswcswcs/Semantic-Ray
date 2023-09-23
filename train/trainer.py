@@ -8,7 +8,7 @@ from torch.optim import Adam, AdamW, SGD
 from torch.utils.data import DataLoader
 from tqdm import tqdm
 from pprint import pprint
-
+import wandb
 from dataset.train_dataset import RendererDataset
 from network.loss import name2loss
 from network.renderer import Renderer
@@ -271,3 +271,4 @@ class Trainer:
             else:
                 log_results[k] = np.mean(v.detach().cpu().numpy())
         self.logger.log(log_results, prefix, step, verbose)
+        wandb.log(log_results)

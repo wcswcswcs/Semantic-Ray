@@ -119,7 +119,13 @@ def build_imgs_info(database, ref_ids, pad_interval=-1, is_aligned=True, align_d
     if align_depth_range:
         ref_depth_range[:,0]=np.min(ref_depth_range[:,0])
         ref_depth_range[:,1]=np.max(ref_depth_range[:,1])
-    ref_imgs_info = {'imgs': ref_imgs, 'poses': ref_poses, 'Ks': ref_Ks, 'depth_range': ref_depth_range, 'masks': ref_masks, 'labels': ref_labels}
+    ref_imgs_info = {
+        'imgs': ref_imgs, 
+        'poses': ref_poses, 
+        'Ks': ref_Ks, 
+        'depth_range': ref_depth_range, 
+        'masks': ref_masks, 
+        'labels': ref_labels}
     if has_depth: ref_imgs_info['depth'] = ref_depths
     if pad_interval!=-1:
         ref_imgs_info = pad_imgs_info(ref_imgs_info, pad_interval)

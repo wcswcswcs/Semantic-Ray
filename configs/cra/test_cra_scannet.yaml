@@ -20,6 +20,7 @@ agg_net_cfg: {
   use_ptrans: true,
   ptrans_first: false,
   sem_only: true,
+  color_cal_type: rgb_in,
 }
 fine_agg_net_cfg: {
   label_hidden: [16],
@@ -27,6 +28,7 @@ fine_agg_net_cfg: {
   use_ptrans: true,
   ptrans_first: false,
   sem_only: true,
+  color_cal_type: rgb_in,
 }
 
 # loss

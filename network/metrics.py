@@ -90,6 +90,7 @@ class PSNR_SSIM(Loss):
         compute_psnr_prefix('dr')
         compute_psnr_prefix('nr_fine')
         compute_psnr_prefix('dr_fine')
+        # wandb.log(outputs)
         return outputs
 
 
@@ -169,8 +170,8 @@ class VisualizeSemantic(Loss):
         
         data_index = kwargs['data_index']
         model_name = kwargs['model_name']
-        wandb.log({
-            "VisualizeSemantic": [wandb.Image(im,caption=f'{model_name}/step-{step}-index-{data_index}-sem') for im in imgs]})
+        # wandb.log({
+        #     "VisualizeSemantic": [wandb.Image(im,caption=f'{model_name}/step-{step}-index-{data_index}-sem') for im in concat_images_list(*imgs)]})
         Path(f'data/vis/{model_name}').mkdir(exist_ok=True, parents=True)
         imsave(f'data/vis/{model_name}/step-{step}-index-{data_index}-sem.png', concat_images_list(*imgs))
         return outputs
@@ -234,6 +235,7 @@ class IoU(Loss):
             'total_accuracy': torch.tensor([total_accuracy], dtype=torch.float32),
             'class_average_accuracy': torch.tensor([class_average_accuracy], dtype=torch.float32)
         }
+        # wandb.log(output)
         return output
 
 

@@ -1,5 +1,5 @@
 name: train_cra_scannet
-
+project_name: sray
 
 # network
 
@@ -46,7 +46,7 @@ use_nr_fine_loss: true
 # lr
 # load_pretrain: data/model/neuray_gen_depth/model_best.pth
 total_step: 600000
-val_interval: 20
+val_interval: 5000
 save_interval: 5000
 lr_type: exp_decay
 optimizer_type: adam
