@@ -514,8 +514,8 @@ class CRANet(IBRNetWithNeuRay):
             sem_latent = sem_latent.reshape(b, n, v, f)
             # rtrans
             sem_latent = sem_latent.permute(0, 2, 1, 3).reshape(-1, n, f)
-            trans_mask = num_valid_obs.unsqueeze(1).expand(-1, num_views, -1, -1).reshape(b * v, n, 1)
-            trans_mask = (trans_mask > 1).float()
+            # trans_mask = num_valid_obs.unsqueeze(1).expand(-1, num_views, -1, -1).reshape(b * v, n, 1)
+            # trans_mask = (trans_mask > 1).float()
             sem_latent = sem_latent + self.sem_pos_encoding
             sem_latent, _ = self.sem_rtrans_new(
                 sem_latent, sem_latent, sem_latent, mask=trans_mask)

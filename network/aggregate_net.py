@@ -1,7 +1,7 @@
 import torch
 import torch.nn as nn
 
-from network.cranet import *
+from network.cranet_v3 import *
 
 
 def get_dir_diff(prj_dir, que_dir):
@@ -92,8 +92,6 @@ class SemanticAggregationNet(nn.Module):
         
         if 'sem_feats' in prj_dict:
             prj_sem_feats = prj_dict['sem_feats']
-            prj_sem_feats = prj_sem_feats.reshape(
-                rfn, qn * rn, dn, -1).permute(1, 2, 0, 3)
         else:
             prj_sem_feats = None
         outs = self.agg_impl(prj_img_feats, prob_embedding,

@@ -1,5 +1,6 @@
-name: train_cra_scannet
-project_name: sray-o
+name: cra_def
+project_name: sray
+
 # network
 
 init_net_type: depth
@@ -14,28 +15,29 @@ render_label: true
 num_classes: 20
 ignore_label: 20
 agg_net_cfg: {
-  network_name: CRANet,
+  network_name: CRANet_Def,
   label_hidden: [16],
   num_classes: 20,
   use_ptrans: true,
   ptrans_first: false,
   sem_only: true,
-  color_cal_type: rgb_in,
+  color_cal_type: feat_pred, # 
 }
 fine_agg_net_cfg: {
-  network_name: CRANet,
+  network_name: CRANet_Def,
   label_hidden: [16],
   num_classes: 20,
   use_ptrans: true,
   ptrans_first: false,
   sem_only: true,
-  color_cal_type: rgb_in,
+  color_cal_type: feat_pred, # 
 }
 
 # loss
-loss: [render, semantic]
+loss: [render, semantic ]
 render_loss_scale: 0.75
 semantic_loss_scale: 0.25
+semantic_loss_2d_scale: 0.01
 val_metric: [psnr_ssim, vis_img, iou, vis_sem]
 key_metric_name: miou
 use_dr_loss: false

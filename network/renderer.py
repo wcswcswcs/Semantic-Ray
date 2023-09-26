@@ -175,8 +175,9 @@ class BaseRenderer(nn.Module):
         prj_dict = self.predict_proj_ray_prob(
             prj_dict, ref_imgs_info, que_dists, is_fine)
         prj_dict = self.get_img_feats(ref_imgs_info, prj_dict)
+        prj_dict['sem_feats'] = ref_imgs_info['img_feats']
 
-        nr_out = self.network_rendering(prj_dict, que_dir, is_fine)
+        nr_out = self.network_rendering(prj_dict, que_dir, is_fine )
         if self.cfg['render_label']:
             hit_prob_nr, colors_nr, pixel_colors_nr, label_nr, pixel_label_nr = nr_out
             outputs = {

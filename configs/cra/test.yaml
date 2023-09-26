@@ -15,7 +15,7 @@ render_label: true
 num_classes: 20
 ignore_label: 20
 agg_net_cfg: {
-  network_name: CRANet_v2,
+  network_name: CRANet_Def,
   label_hidden: [16],
   num_classes: 20,
   use_ptrans: true,
@@ -24,7 +24,7 @@ agg_net_cfg: {
   color_cal_type: feat_pred, # 
 }
 fine_agg_net_cfg: {
-  network_name: CRANet_v2,
+  network_name: CRANet_Def,
   label_hidden: [16],
   num_classes: 20,
   use_ptrans: true,
@@ -34,10 +34,10 @@ fine_agg_net_cfg: {
 }
 
 # loss
-loss: [render, semantic]
+loss: [render, semantic ]
 render_loss_scale: 0.75
 semantic_loss_scale: 0.25
-semantic_loss_2d_scale: 0.25
+semantic_loss_2d_scale: 0.05
 val_metric: [psnr_ssim, vis_img, iou, vis_sem]
 key_metric_name: miou
 use_dr_loss: false
@@ -47,17 +47,17 @@ use_nr_fine_loss: true
 # lr
 # load_pretrain: data/model/neuray_gen_depth/model_best.pth
 total_step: 600000
-val_interval: 100
+val_interval: 5000
 save_interval: 5000
 lr_type: exp_decay
 optimizer_type: adam
 max_grad_norm: 10
 lr_cfg:
   scale_new: 1.0
-  lr_init: 1.0e-3
+  lr_init: 5.0e-5
   decay_step: 5000
   decay_rate: 0.2
-  lr_min: 5.0e-5
+  lr_min: 1.0e-7
   optim_args: {weight_decay: 1.0e-5}
 
 # dataset

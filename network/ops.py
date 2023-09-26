@@ -1,6 +1,17 @@
 import torch
 import torch.nn as nn
 import torch.nn.functional as F
+def has_nan(tensor):
+    """
+    检查一个PyTorch张量中是否包含NaN值。
+    
+    参数：
+    tensor (torch.Tensor): 要检查的张量。
+    
+    返回：
+    bool: 如果张量中包含NaN值，则返回True；否则返回False。
+    """
+    return torch.isnan(tensor).any()
 
 def conv3x3(in_planes, out_planes, stride=1, groups=1, dilation=1):
     """3x3 convolution with padding"""
@@ -317,7 +328,50 @@ class ResEncoder(nn.Module):
 
         x_out = self.out_conv(x)
         return x_out
-    
+
+# from https://github.com/lucidrains/stylegan2-pytorch/blob/05f7585e8da9c09752696872e04de0414a972486/stylegan2_pytorch/stylegan2_pytorch.py
+class Conv2DMod(nn.Module):
+    def __init__(self, in_chan, out_chan, kernel, demod=True, stride=1, dilation=1, eps = 1e-8, **kwargs):
+        super().__init__()
+        self.filters = out_chan
+        self.demod = demod
+        self.kernel = kernel
+        self.stride = stride
+        self.dilation = dilation
+        self.weight = nn.Parameter(torch.randn((out_chan, in_chan, kernel, kernel)))
+        self.eps = eps
+        nn.init.kaiming_normal_(self.weight, a=0, mode='fan_in', nonlinearity='leaky_relu')
+
+    def _get_same_padding(self, size, kernel, dilation, stride):
+        return ((size - 1) * (stride - 1) + dilation * (kernel - 1)) // 2
+
+    def forward(self, x, y):
+        b, c, h, w = x.shape
+
+        w1 = y[:, None, :, None, None]
+        w2 = self.weight[None, :, :, :, :]
+        weights = w2 * (w1 + 1)
+
+        if self.demod:
+            d = torch.rsqrt((weights ** 2).sum(dim=(2, 3, 4), keepdim=True) + self.eps)
+            weights = weights * d
+
+        x = x.reshape(1, -1, h, w)
+
+        _, _, *ws = weights.shape
+        weights = weights.reshape(b * self.filters, *ws)
+
+        padding = self._get_same_padding(h, self.kernel, self.dilation, self.stride)
+        x = F.conv2d(x, weights, padding=padding, groups=b)
+
+        x = x.reshape(-1, self.filters, h, w)
+        return x
+
+    def __repr__(self):
+        return (
+            f"{self.__class__.__name__}({self.weight.shape[1]}, {self.weight.shape[0]},"
+            f" {self.weight.shape[2]}, stride={self.stride}, dilation={self.dilation}, demodulation={self.demod})"
+        )
     
 if __name__ == '__main__':
     print('ResUNetLight')
