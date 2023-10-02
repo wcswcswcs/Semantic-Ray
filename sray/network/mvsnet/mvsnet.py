@@ -1,7 +1,7 @@
 import torch
 import torch.nn as nn
 import torch.nn.functional as F
-from network.mvsnet.modules import ConvBnReLU, ConvBnReLU3D, depth_regression, homo_warp
+from sray.network.mvsnet.modules import ConvBnReLU, ConvBnReLU3D, depth_regression, homo_warp
 from inplace_abn import InPlaceABN
 
 class FeatureNet(nn.Module):

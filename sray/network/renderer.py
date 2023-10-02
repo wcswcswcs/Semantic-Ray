@@ -1,12 +1,12 @@
 import torch
 import torch.nn as nn
 
-from network.aggregate_net import name2agg_net
-from network.dist_decoder import name2dist_decoder
-from network.init_net import name2init_net
-from network.ops import ResUNetLight,upconv
-from network.vis_encoder import name2vis_encoder
-from network.render_ops import *
+from sray.network.aggregate_net import name2agg_net
+from sray.network.dist_decoder import name2dist_decoder
+from sray.network.init_net import name2init_net
+from sray.network.ops import ResUNetLight,upconv
+from sray.network.vis_encoder import name2vis_encoder
+from sray.network.render_ops import *
 
 
 class BaseRenderer(nn.Module):

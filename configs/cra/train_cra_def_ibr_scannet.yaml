@@ -1,4 +1,4 @@
-name: test
+name: crav_def_ibr
 project_name: sray
 
 # network
@@ -98,13 +98,13 @@ DAT:
     patch_size: 4
     num_classes: 1000
     expansion: 4
-    dim_stem: 96
-    dims: [96, 192, 384, 768]
+    dim_stem: 64
+    dims: [64, 128, 256, 512]
     depths: [2, 4, 18, 2]
     stage_spec: [[N, D], [N, D, N, D], [N, D, N, D, N, D, N, D, N, D, N, D, N, D, N, D, N, D], [D, D]]
-    heads: [3, 6, 12, 24]
+    heads: [2, 4, 8, 16]
     window_sizes: [7, 7, 7, 7]
-    groups: [1, 2, 3, 6]
+    groups: [1, 2, 4, 8]
     use_pes: [True, True, True, True]
     dwc_pes: [False, False, False, False]
     strides: [8, 4, 2, 1]
@@ -118,4 +118,4 @@ DAT:
     nat_ksizes: [7, 7, 7, 7]
     drop_rate: 0.0
     attn_drop_rate: 0.0
-    drop_path_rate: 0.4
+    drop_path_rate: 0.2

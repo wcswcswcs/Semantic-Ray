@@ -1,6 +1,6 @@
 import numpy as np
 
-from dataset.database import BaseDatabase
+from sray.dataset.database import BaseDatabase
 # from utils.base_utils import pose_inverse, project_points
 
 

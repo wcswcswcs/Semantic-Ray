@@ -1,7 +1,7 @@
 import torch
 import torch.nn as nn
 
-from network.ops import interpolate_feats
+from sray.network.ops import interpolate_feats
 
 
 class Loss:

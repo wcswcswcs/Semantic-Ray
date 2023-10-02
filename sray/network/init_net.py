@@ -4,10 +4,10 @@ import torch.nn.functional as F
 import numpy as np
 from inplace_abn import ABN
 
-from network.mvsnet.modules import depth_regression
-from network.mvsnet.mvsnet import MVSNet, load_ckpt
-from network.ops import interpolate_feats, masked_mean_var, ResEncoder, ResUNetLight, conv3x3, ResidualBlock, conv1x1
-from network.render_ops import project_points_ref_views
+from sray.network.mvsnet.modules import depth_regression
+from sray.network.mvsnet.mvsnet import MVSNet, load_ckpt
+from sray.network.ops import interpolate_feats, masked_mean_var, ResEncoder, ResUNetLight, conv3x3, ResidualBlock, conv1x1
+from sray.network.render_ops import project_points_ref_views
 
 
 def depth2pts3d(depth, ref_Ks, ref_poses):

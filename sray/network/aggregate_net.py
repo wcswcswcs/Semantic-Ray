@@ -1,7 +1,7 @@
 import torch
 import torch.nn as nn
 
-from network.cranet_v3 import *
+from sray.network.cranet_v3 import *
 
 
 def get_dir_diff(prj_dir, que_dir):

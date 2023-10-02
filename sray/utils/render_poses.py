@@ -4,8 +4,8 @@ from scipy.spatial.transform import Rotation
 from scipy.spatial.transform import Slerp
 
 # from asset import example_scene_name2inter_ids, blended_mvs_ids
-from dataset.database import BaseDatabase, ExampleDatabase
-from utils.base_utils import pose_inverse, transform_points_Rt
+from sray.dataset.database import BaseDatabase, ExampleDatabase
+from sray.utils.base_utils import pose_inverse, transform_points_Rt
 
 
 def interpolate_render_poses(database, inter_img_ids, view_num, loop=True):

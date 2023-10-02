@@ -9,14 +9,14 @@ from torch.utils.data import DataLoader
 from tqdm import tqdm
 from pprint import pprint
 import wandb
-from dataset.train_dataset import RendererDataset
-from network.loss import name2loss
-from network.renderer import Renderer
-from train.lr_common_manager import name2lr_manager
-from network.metrics import name2metrics
-from train.train_tools import to_cuda, Logger, reset_learning_rate, MultiGPUWrapper, DummyLoss
-from train.train_valid import ValidationEvaluator
-from utils.dataset_utils import simple_collate_fn, dummy_collate_fn
+from sray.dataset.train_dataset import RendererDataset
+from sray.network.loss import name2loss
+from sray.network.renderer import Renderer
+from sray.train.lr_common_manager import name2lr_manager
+from sray.network.metrics import name2metrics
+from sray.train.train_tools import to_cuda, Logger, reset_learning_rate, MultiGPUWrapper, DummyLoss
+from sray.train.train_valid import ValidationEvaluator
+from sray.utils.dataset_utils import simple_collate_fn, dummy_collate_fn
 
 
 class Trainer:

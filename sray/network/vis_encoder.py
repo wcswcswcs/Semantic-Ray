@@ -1,7 +1,7 @@
 import torch.nn as nn
 import torch
 
-from network.ops import conv3x3, ResidualBlock, conv1x1
+from sray.network.ops import conv3x3, ResidualBlock, conv1x1
 
 class DefaultVisEncoder(nn.Module):
     default_cfg={}

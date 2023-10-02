@@ -16,3 +16,5 @@ scikit-learn
 imgviz
 wandb
 einops
+timm
+natten

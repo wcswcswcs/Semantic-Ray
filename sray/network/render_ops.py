@@ -1,5 +1,5 @@
 import torch
-from network.ops import interpolate_feats
+from sray.network.ops import interpolate_feats
 
 def coords2rays(coords, poses, Ks):
     """

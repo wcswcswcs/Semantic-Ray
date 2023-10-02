@@ -4,8 +4,8 @@ import torch
 import numpy as np
 from tqdm import tqdm
 
-from network.metrics import name2key_metrics
-from train.train_tools import to_cuda
+from sray.network.metrics import name2key_metrics
+from sray.train.train_tools import to_cuda
 
 
 class ValidationEvaluator:

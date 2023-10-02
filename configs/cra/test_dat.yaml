@@ -1,0 +1,31 @@
+name: test
+project_name: sray
+
+
+DAT:
+    final_output: False
+    img_size: [80,60]
+    patch_size: 1
+    num_classes: 21
+    expansion: 4
+    dim_stem: 32
+    dims: [64, 128, 256]
+    depths: [2, 4, 2]
+    stage_spec: [[N, D], [N, D, N, D], [D, D]]
+    heads: [4, 8, 8,]
+    window_sizes: [7, 7, 7]
+    groups: [1, 2, 4]
+    use_pes: [True, True, True]
+    dwc_pes: [False, False, False]
+    strides: [1, 1, 1]
+    offset_range_factor: [-1, -1, -1]
+    no_offs: [False, False, False]
+    fixed_pes: [False, False, False]
+    use_dwc_mlps: [True, True, True]
+    use_lpus: [True, True, True]
+    use_conv_patches: True
+    ksizes: [7, 5, 3]
+    nat_ksizes: [7, 7, 7]
+    drop_rate: 0.0
+    attn_drop_rate: 0.0
+    drop_path_rate: 0.4

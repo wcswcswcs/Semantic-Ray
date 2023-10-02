@@ -5,8 +5,8 @@ import torch
 from skimage.io import imsave
 from imgviz import label_colormap
 import wandb
-from network.loss import Loss
-from utils.base_utils import color_map_backward
+from sray.network.loss import Loss
+from sray.utils.base_utils import color_map_backward
 from skimage.metrics import structural_similarity
 import numpy as np
 

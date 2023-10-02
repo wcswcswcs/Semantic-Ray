@@ -1,7 +1,7 @@
 import torch.nn as nn
 import torch
 
-from network.ops import AddBias
+from sray.network.ops import AddBias
 
 def get_near_far_points(depth, interval, depth_range, is_ref, fixed_interval=False, fixed_interval_val=0.01):
     """                               is_ref     |  not is_ref

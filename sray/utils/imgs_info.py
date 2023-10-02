@@ -1,7 +1,7 @@
 import numpy as np
 import torch
 
-from utils.base_utils import color_map_forward, pad_img_end
+from sray.utils.base_utils import color_map_forward, pad_img_end
 
 def random_crop(ref_imgs_info, que_imgs_info, target_size):
     imgs = ref_imgs_info['imgs']
