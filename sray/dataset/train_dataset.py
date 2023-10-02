@@ -1,14 +1,14 @@
 import torch
 from torch.utils.data import Dataset
 from asset import *
-from dataset.database import parse_database_name, get_database_split
+from sray.dataset.database import parse_database_name, get_database_split
 import numpy as np
 
-from utils.base_utils import get_coords_mask
-from utils.dataset_utils import set_seed
-from utils.imgs_info import build_imgs_info, random_crop, random_flip, pad_imgs_info, imgs_info_slice, \
+from sray.utils.base_utils import get_coords_mask
+from sray.utils.dataset_utils import set_seed
+from sray.utils.imgs_info import build_imgs_info, random_crop, random_flip, pad_imgs_info, imgs_info_slice, \
     imgs_info_to_torch
-from utils.view_select import compute_nearest_camera_indices
+from sray.utils.view_select import compute_nearest_camera_indices
 
 def select_train_ids_for_real_estate(img_ids):
     num_frames = len(img_ids)

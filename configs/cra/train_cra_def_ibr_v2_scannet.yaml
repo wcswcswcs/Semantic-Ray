@@ -1,4 +1,4 @@
-name: crav_def_ibr
+name: CRANet_Def_IBR_v2
 project_name: sray
 
 # network
@@ -15,7 +15,7 @@ render_label: true
 num_classes: 20
 ignore_label: 20
 agg_net_cfg: {
-  network_name: CRANet_Def_IBR,
+  network_name: CRANet_Def_IBR_v2,
   label_hidden: [16],
   num_classes: 20,
   use_ptrans: true,
@@ -24,7 +24,7 @@ agg_net_cfg: {
   color_cal_type: feat_pred, # 
 }
 fine_agg_net_cfg: {
-  network_name: CRANet_Def_IBR,
+  network_name: CRANet_Def_IBR_v2,
   label_hidden: [16],
   num_classes: 20,
   use_ptrans: true,
@@ -37,7 +37,7 @@ fine_agg_net_cfg: {
 loss: [render, semantic]
 render_loss_scale: 0.75
 semantic_loss_scale: 0.25
-semantic_loss_2d_scale: 0.0
+semantic_loss_2d_scale: 0.25
 val_metric: [psnr_ssim, vis_img, iou, vis_sem]
 key_metric_name: miou
 use_dr_loss: false
@@ -45,13 +45,13 @@ use_dr_fine_loss: false
 use_nr_fine_loss: true
 
 # lr
-load_pretrain: data/model/neuray_gen_depth/model_best.pth
+# load_pretrain: data/model/neuray_gen_depth/model_best.pth
 total_step: 600000
 val_interval: 5000
 save_interval: 5000
 lr_type: exp_decay
 optimizer_type: adam
-max_grad_norm: 10
+max_grad_norm: 1
 lr_cfg:
   scale_new: 1.0
   lr_init: 1.0e-3
@@ -94,17 +94,22 @@ semantic_color_map: [
 ]
 
 DAT:
-    img_size: 224
-    patch_size: 4
-    num_classes: 1000
+    final_output: False
+    down_projs: True
+    img_size: [80,60]
+    patch_size: 1
+    num_classes: 21
+    in_dim: 32
+
+
     expansion: 4
-    dim_stem: 64
-    dims: [64, 128, 256, 512]
+    dim_stem: 96
+    dims: [96, 192, 384, 768]
     depths: [2, 4, 18, 2]
     stage_spec: [[N, D], [N, D, N, D], [N, D, N, D, N, D, N, D, N, D, N, D, N, D, N, D, N, D], [D, D]]
-    heads: [2, 4, 8, 16]
+    heads: [3, 6, 12, 24]
     window_sizes: [7, 7, 7, 7]
-    groups: [1, 2, 4, 8]
+    groups: [1, 2, 3, 6]
     use_pes: [True, True, True, True]
     dwc_pes: [False, False, False, False]
     strides: [8, 4, 2, 1]
@@ -113,9 +118,9 @@ DAT:
     fixed_pes: [False, False, False, False]
     use_dwc_mlps: [True, True, True, True]
     use_lpus: [True, True, True, True]
-    use_conv_patches: True
+    use_conv_patches: False
     ksizes: [9, 7, 5, 3]
     nat_ksizes: [7, 7, 7, 7]
     drop_rate: 0.0
     attn_drop_rate: 0.0
-    drop_path_rate: 0.2
+    drop_path_rate: 0.4

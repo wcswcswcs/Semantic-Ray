@@ -87,15 +87,22 @@ class SemanticAggregationNet(nn.Module):
         prj_img_feats = torch.cat([prj_rgb, prj_img_feats], -1)
         prj_img_feats = prj_img_feats.reshape(
             rfn, qn * rn, dn, -1).permute(1, 2, 0, 3)
+        
+        prj_img_feats_dat = prj_dict.get('img_feats_dat',None)
+        if prj_img_feats_dat is not None:
+            prj_img_feats_dat = prj_img_feats_dat.reshape(
+                rfn, qn * rn, dn, -1).permute(1, 2, 0, 3)
+        
         prob_embedding = prob_embedding.reshape(
             rfn, qn * rn, dn, -1).permute(1, 2, 0, 3)
         
         if 'sem_feats' in prj_dict:
-            prj_sem_feats = prj_dict['sem_feats']
+            ref_sem_feats = prj_dict['sem_feats']
         else:
-            prj_sem_feats = None
+            ref_sem_feats = None
+        ref_sem_feats_dat = prj_dict.get('sem_feats_dat',None)
         outs = self.agg_impl(prj_img_feats, prob_embedding,
-                             dir_diff, valid_mask, prj_sem_feats)
+                             dir_diff, valid_mask, ref_sem_feats,ref_sem_feats_dat,prj_img_feats_dat)
 
         colors = outs[..., :3]  # qn*rn,dn,3
         density = outs[..., 3]  # qn*rn,dn,0

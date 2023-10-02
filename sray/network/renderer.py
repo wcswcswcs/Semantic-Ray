@@ -7,7 +7,7 @@ from sray.network.init_net import name2init_net
 from sray.network.ops import ResUNetLight,upconv
 from sray.network.vis_encoder import name2vis_encoder
 from sray.network.render_ops import *
-
+from sray.network.dat.dat import DAT
 
 class BaseRenderer(nn.Module):
     base_cfg = {
@@ -50,6 +50,9 @@ class BaseRenderer(nn.Module):
         self.dist_decoder = name2dist_decoder[self.cfg['dist_decoder_type']](
             self.cfg['dist_decoder_cfg'])
         self.image_encoder = ResUNetLight(3, [1, 2, 6, 4], 32, inplanes=16)
+        self.use_dat = True if 'DAT' in cfg.keys() else False
+        if self.use_dat:
+            self.dat = DAT(**cfg['DAT'])
         self.sem_head_2d =nn.Sequential(
             upconv(32,64,3,4),
             nn.SiLU(),
@@ -110,6 +113,13 @@ class BaseRenderer(nn.Module):
         prj_img_feats = interpolate_feature_map(img_feats, prj_dict['pts'].reshape(rfn, qn * rn * dn, 2),
                                                 prj_dict['mask'].reshape(rfn, qn * rn * dn), h, w,)
         prj_dict['img_feats'] = prj_img_feats.reshape(rfn, qn, rn, dn, -1)
+        img_feats_dat = ref_imgs_info.get('img_feats_dat',None)
+        if img_feats_dat is not None:
+            prj_img_feats_dat = interpolate_feature_map(img_feats_dat, prj_dict['pts'].reshape(rfn, qn * rn * dn, 2),
+                                                prj_dict['mask'].reshape(rfn, qn * rn * dn), h, w,)
+            prj_dict['img_feats_dat'] = prj_img_feats_dat.reshape(rfn, qn, rn, dn, -1)
+
+
         return prj_dict
 
     def predict_self_hit_prob_impl(self, que_ray_feats, que_depth, que_dists, depth_range, is_fine):
@@ -176,6 +186,7 @@ class BaseRenderer(nn.Module):
             prj_dict, ref_imgs_info, que_dists, is_fine)
         prj_dict = self.get_img_feats(ref_imgs_info, prj_dict)
         prj_dict['sem_feats'] = ref_imgs_info['img_feats']
+        prj_dict['sem_feats_dat'] = ref_imgs_info['img_feats_dat']
 
         nr_out = self.network_rendering(prj_dict, que_dir, is_fine )
         if self.cfg['render_label']:
@@ -251,8 +262,11 @@ class BaseRenderer(nn.Module):
 
     def render(self, que_imgs_info, ref_imgs_info, is_train):
         ref_img_feats = self.image_encoder(ref_imgs_info['imgs'])
+        _,ref_img_feats_dat = self.dat(ref_img_feats)
+        
         # ref_sem_pred = self.sem_head_2d(ref_img_feats)
         ref_imgs_info['img_feats'] = ref_img_feats
+        ref_imgs_info['img_feats_dat'] = ref_img_feats_dat
         ref_imgs_info['ray_feats'] = self.vis_encoder(
             ref_imgs_info['ray_feats'], ref_img_feats)
 
@@ -281,6 +295,7 @@ class BaseRenderer(nn.Module):
             render_info_all[k] = torch.cat(v, 1)
 
         # render_info['ref_sem_pred'] = ref_sem_pred
+        render_info_all['ref_img_feats_dat'] = ref_img_feats_dat
 
         return render_info_all
 
@@ -371,5 +386,9 @@ class Renderer(BaseRenderer):
         if (self.cfg['use_depth_loss'] and 'true_depth' in ref_imgs_info) or (not is_train):
             render_outputs.update(
                 self.predict_mean_for_depth_loss(ref_imgs_info))
-        render_outputs['ref_sem_pred'] = self.sem_head_2d(ref_imgs_info['img_feats'])
+        if self.use_dat:
+            y = render_outputs['ref_img_feats_dat']
+        else:
+            y = ref_imgs_info['img_feats']
+        render_outputs['ref_sem_pred'] = self.sem_head_2d(y)
         return render_outputs

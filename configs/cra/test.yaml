@@ -15,7 +15,7 @@ render_label: true
 num_classes: 20
 ignore_label: 20
 agg_net_cfg: {
-  network_name: CRANet_Def_IBR,
+  network_name: CRANet_Def_IBR_v2,
   label_hidden: [16],
   num_classes: 20,
   use_ptrans: true,
@@ -24,7 +24,7 @@ agg_net_cfg: {
   color_cal_type: feat_pred, # 
 }
 fine_agg_net_cfg: {
-  network_name: CRANet_Def_IBR,
+  network_name: CRANet_Def_IBR_v2,
   label_hidden: [16],
   num_classes: 20,
   use_ptrans: true,
@@ -37,7 +37,7 @@ fine_agg_net_cfg: {
 loss: [render, semantic]
 render_loss_scale: 0.75
 semantic_loss_scale: 0.25
-semantic_loss_2d_scale: 0.0
+semantic_loss_2d_scale: 0.1
 val_metric: [psnr_ssim, vis_img, iou, vis_sem]
 key_metric_name: miou
 use_dr_loss: false
@@ -47,7 +47,7 @@ use_nr_fine_loss: true
 # lr
 load_pretrain: data/model/neuray_gen_depth/model_best.pth
 total_step: 600000
-val_interval: 5000
+val_interval: 50
 save_interval: 5000
 lr_type: exp_decay
 optimizer_type: adam
@@ -94,9 +94,14 @@ semantic_color_map: [
 ]
 
 DAT:
-    img_size: 224
-    patch_size: 4
-    num_classes: 1000
+    final_output: False
+    down_projs: True
+    img_size: [80,60]
+    patch_size: 1
+    num_classes: 21
+    in_dim: 32
+
+
     expansion: 4
     dim_stem: 96
     dims: [96, 192, 384, 768]
@@ -113,7 +118,7 @@ DAT:
     fixed_pes: [False, False, False, False]
     use_dwc_mlps: [True, True, True, True]
     use_lpus: [True, True, True, True]
-    use_conv_patches: True
+    use_conv_patches: False
     ksizes: [9, 7, 5, 3]
     nat_ksizes: [7, 7, 7, 7]
     drop_rate: 0.0

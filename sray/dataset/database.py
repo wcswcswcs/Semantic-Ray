@@ -9,8 +9,8 @@ from PIL import Image
 from skimage.io import imread
 from natsort import natsorted
 
-from utils.base_utils import downsample_gaussian_blur, pose_inverse
-from .semantic_utils import PointSegClassMapping
+from sray.utils.base_utils import downsample_gaussian_blur, pose_inverse
+from sray.dataset.semantic_utils import PointSegClassMapping
 
 
 class BaseDatabase(abc.ABC):

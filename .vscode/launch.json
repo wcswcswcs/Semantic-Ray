@@ -1,0 +1,43 @@
+{
+    // Use IntelliSense to learn about possible attributes.
+    // Hover to view descriptions of existing attributes.
+    // For more information, visit: https://go.microsoft.com/fwlink/?linkid=830387
+    "version": "0.2.0",
+    "configurations": [
+        {
+            "name": "Python: Current File",
+            "env": {"CUDA_VISIBLE_DEVICES": "3" },
+            "type": "python",
+            "request": "launch",
+            "program": "${file}",
+            "console": "integratedTerminal",
+            "justMyCode": true
+        },
+        {
+            "name": "Python: Training",
+            "type": "python",
+            "request": "launch",
+            "env": {"CUDA_VISIBLE_DEVICES": "3" },
+            "program": "${workspaceFolder}/run_training.py",
+            "args": [
+                "--cfg",
+                "configs/cra/test.yaml"
+            ],
+            "console": "integratedTerminal",
+            "justMyCode": true
+        },
+        {
+            "name": "Python: Evaluation",
+            "type": "python",
+            "request": "launch",
+            "program": "${workspaceFolder}/eval.py",
+            "env": {"CUDA_VISIBLE_DEVICES":"3"},
+            "args": [
+                "--config",
+                "config/eval_ball_v3.json"
+            ],
+            "console": "integratedTerminal",
+            "justMyCode": true
+        },
+    ]
+}

@@ -27,7 +27,8 @@ if __name__=='__main__':
     print(cfg)
     model = DAT(**cfg).cuda()
     data = torch.rand((8,32,60,80)).cuda()
-    y,_,_ = model(data)
+    y,outs, = model(data)
     print(f"y's shape: {y.shape}")
+    print(f"outs's shape: {outs.shape}")
 
 

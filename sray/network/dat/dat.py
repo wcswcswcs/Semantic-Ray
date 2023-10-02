@@ -191,6 +191,8 @@ class DAT(nn.Module):
         super().__init__()
         self.patch_size = patch_size
         self.final_output = kwargs['final_output']
+        self.use_down_projs = kwargs['down_projs']
+        self.in_dim = kwargs['in_dim']
         if patch_size!= 1:
             self.patch_proj = nn.Sequential(
                 nn.Conv2d(3, dim_stem // 2, 3, patch_size // 2, 1),
@@ -202,13 +204,27 @@ class DAT(nn.Module):
                 nn.Conv2d(3, dim_stem, patch_size, patch_size, 0),
                 LayerNormProxy(dim_stem)
             )
+        else:
+            self.patch_proj = nn.Sequential(
+                nn.Conv2d(self.in_dim, dim_stem // 2, 3, patch_size // 2, 1),
+                LayerNormProxy(dim_stem // 2),
+                nn.GELU(),
+                nn.Conv2d(dim_stem // 2, dim_stem, 3, patch_size // 2, 1),
+                LayerNormProxy(dim_stem)
+            ) if use_conv_patches else nn.Sequential(
+                nn.Conv2d(self.in_dim, dim_stem, patch_size, patch_size, 0),
+                LayerNormProxy(dim_stem)
+            )
         img_size = np.array(img_size)
         # img_size = img_size // patch_size
         dpr = [x.item() for x in torch.linspace(0, drop_path_rate, sum(depths))]
 
         self.stages = nn.ModuleList()
-        for i in range(3):
-            dim1 = dim_stem if i == 0 else dims[i - 1] * 2
+        for i in range(len(stage_spec)):
+            if self.use_down_projs:
+                dim1 = dim_stem if i == 0 else dims[i - 1] * 2
+            else:
+                dim1 = dim_stem if i == 0 else dims[i - 1] 
             dim2 = dims[i]
             self.stages.append(
                 TransformerStage(
@@ -225,18 +241,20 @@ class DAT(nn.Module):
                 )
             )
             img_size = img_size // 2
+            
 
         self.down_projs = nn.ModuleList()
-        for i in range(2):
-            self.down_projs.append(
-                nn.Sequential(
-                    nn.Conv2d(dims[i], dims[i + 1], 3, 2, 1, bias=False),
-                    LayerNormProxy(dims[i + 1])
-                ) if use_conv_patches else nn.Sequential(
-                    nn.Conv2d(dims[i], dims[i + 1], 2, 2, 0, bias=False),
-                    LayerNormProxy(dims[i + 1])
+        if self.use_down_projs:
+            for i in range(len(stage_spec)-1):
+                self.down_projs.append(
+                    nn.Sequential(
+                        nn.Conv2d(dims[i], dims[i + 1], 3, 2, 1, bias=False),
+                        LayerNormProxy(dims[i + 1])
+                    ) if use_conv_patches else nn.Sequential(
+                        nn.Conv2d(dims[i], dims[i + 1], 2, 2, 0, bias=False),
+                        LayerNormProxy(dims[i + 1])
+                    )
                 )
-            )
 
         self.cls_norm = LayerNormProxy(dims[-1]) 
         self.cls_head = nn.Linear(dims[-1], num_classes)
@@ -244,6 +262,8 @@ class DAT(nn.Module):
         self.lower_lr_kvs = lower_lr_kvs
 
         self.reset_parameters()
+
+        self.lin_out = nn.Conv2d(sum(dims),self.in_dim,1)
 
     def reset_parameters(self):
 
@@ -304,18 +324,30 @@ class DAT(nn.Module):
         return {'relative_position_bias_table', 'rpe_table'}
 
     def forward(self, x):
-        if self.patch_size != 1:
-            x = self.patch_proj(x)
-        for i in range(3):
+        # if self.patch_size != 1:
+        x = self.patch_proj(x)
+        inp = x.shape[-2:]
+        outs = []
+        for i in range(len(self.stages)):
             x = self.stages[i](x)
-            if i < 2:
+            outs.append(x)
+            if i < len(self.stages)-1 and self.use_down_projs:
                 x = self.down_projs[i](x)
+            
         x = self.cls_norm(x)
+        outs[-1] = x
+        outs = [F.interpolate(
+                        i,
+                        size=inp,
+                        mode='bilinear',
+                        align_corners=False) for i in outs]
+        outs = torch.cat(outs,1)
+        outs = self.lin_out(outs)
         if self.final_output:
             x = F.adaptive_avg_pool2d(x, 1)
             x = torch.flatten(x, 1)
             x = self.cls_head(x)
-        return x, None, None
+        return x, outs
 
 
 

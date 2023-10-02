@@ -1,7 +1,6 @@
 data/
 exps/
 __pycache__
-.vscode
 weights/
 outputs/
 results/

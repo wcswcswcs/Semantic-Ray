@@ -10,7 +10,7 @@ from sray.utils.base_utils import color_map_backward
 from skimage.metrics import structural_similarity
 import numpy as np
 
-from utils.draw_utils import concat_images_list
+from sray.utils.draw_utils import concat_images_list
 
 np.seterr(invalid='ignore')
 

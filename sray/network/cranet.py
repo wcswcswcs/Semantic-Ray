@@ -328,7 +328,7 @@ class IBRNetWithNeuRay(nn.Module):
         sinusoid_table = torch.from_numpy(sinusoid_table).cuda().float().unsqueeze(0)
         return sinusoid_table
 
-    def forward(self, rgb_feat, neuray_feat, ray_diff, mask):
+    def forward(self, rgb_feat, neuray_feat, ray_diff, mask,**_):
         '''
         :param rgb_feat: rgbs and image features [n_rays, n_samples, n_views, n_feat]
         :param ray_diff: ray direction difference [n_rays, n_samples, n_views, 4], first 3 channels are directions,
@@ -439,7 +439,7 @@ class CRANet(IBRNetWithNeuRay):
 
         self.relu = nn.ReLU()
         
-    def forward(self, rgb_feat, neuray_feat, ray_diff, mask, ref_sem_feats=None):
+    def forward(self, rgb_feat, neuray_feat, ray_diff, mask, ref_sem_feats=None,**_):
         '''
         :param rgb_feat: rgbs and image features [n_rays, n_samples, n_views, n_feat]
         :param ray_diff: ray direction difference [n_rays, n_samples, n_views, 4], first 3 channels are directions,
@@ -607,7 +607,7 @@ class CRANet_v1(IBRNetWithNeuRay):
 
         
         
-    def forward(self, rgb_feat, neuray_feat, ray_diff, mask, ref_sem_feats=None):
+    def forward(self, rgb_feat, neuray_feat, ray_diff, mask, ref_sem_feats=None,**_):
         '''
         :param rgb_feat: rgbs and image features [n_rays, n_samples, n_views, n_feat]
         :param ray_diff: ray direction difference [n_rays, n_samples, n_views, 4], first 3 channels are directions,
@@ -784,7 +784,7 @@ class CRANet_v2(IBRNetWithNeuRay):
 
         
         
-    def forward(self, rgb_feat, neuray_feat, ray_diff, mask, ref_sem_feats=None):
+    def forward(self, rgb_feat, neuray_feat, ray_diff, mask, ref_sem_feats=None,**_):
         '''
         :param rgb_feat: rgbs and image features [n_rays, n_samples, n_views, n_feat]
         :param ray_diff: ray direction difference [n_rays, n_samples, n_views, 4], first 3 channels are directions,
