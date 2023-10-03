@@ -37,7 +37,7 @@ fine_agg_net_cfg: {
 loss: [render, semantic]
 render_loss_scale: 0.75
 semantic_loss_scale: 0.25
-semantic_loss_2d_scale: 0.25
+semantic_loss_2d_scale: 0.05
 val_metric: [psnr_ssim, vis_img, iou, vis_sem]
 key_metric_name: miou
 use_dr_loss: false
@@ -45,7 +45,7 @@ use_dr_fine_loss: false
 use_nr_fine_loss: true
 
 # lr
-# load_pretrain: data/model/neuray_gen_depth/model_best.pth
+load_pretrain: data/model/neuray_gen_depth/model_best.pth
 total_step: 600000
 val_interval: 5000
 save_interval: 5000
@@ -104,9 +104,9 @@ DAT:
 
     expansion: 4
     dim_stem: 96
-    dims: [96, 192, 384, 768]
+    dims: [96, 192]
     depths: [2, 4, 18, 2]
-    stage_spec: [[N, D], [N, D, N, D], [N, D, N, D, N, D, N, D, N, D, N, D, N, D, N, D, N, D], [D, D]]
+    stage_spec: [[N, D], [N, D, N, D], ]
     heads: [3, 6, 12, 24]
     window_sizes: [7, 7, 7, 7]
     groups: [1, 2, 3, 6]
