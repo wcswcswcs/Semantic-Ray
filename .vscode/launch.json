@@ -30,11 +30,13 @@
             "name": "Python: Evaluation",
             "type": "python",
             "request": "launch",
-            "program": "${workspaceFolder}/eval.py",
-            "env": {"CUDA_VISIBLE_DEVICES":"3"},
+            "env": {"CUDA_VISIBLE_DEVICES": "0" },
+            "program": "${workspaceFolder}/run_evaluation.py",
             "args": [
-                "--config",
-                "config/eval_ball_v3.json"
+                "--cfg",
+                "test/origin-sray/test_cra_scannet.yaml",
+                "--model-path",
+                "test/origin-sray/model_best.pth"
             ],
             "console": "integratedTerminal",
             "justMyCode": true

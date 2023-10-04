@@ -1,0 +1,1 @@
+CUDA_VISIBLE_DEVICES=0 python run_evaluation.py --cfg test/origin-sray/test_cra_scannet.yaml --model-path test/origin-sray/model_best.pth

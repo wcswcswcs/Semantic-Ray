@@ -439,7 +439,7 @@ class CRANet(IBRNetWithNeuRay):
 
         self.relu = nn.ReLU()
         
-    def forward(self, rgb_feat, neuray_feat, ray_diff, mask, ref_sem_feats=None,**_):
+    def forward(self, rgb_feat, neuray_feat, ray_diff, mask, ref_sem_feats=None,ref_sem_feats_dat=None,rgb_feat_dat=None):
         '''
         :param rgb_feat: rgbs and image features [n_rays, n_samples, n_views, n_feat]
         :param ray_diff: ray direction difference [n_rays, n_samples, n_views, 4], first 3 channels are directions,
@@ -607,7 +607,7 @@ class CRANet_v1(IBRNetWithNeuRay):
 
         
         
-    def forward(self, rgb_feat, neuray_feat, ray_diff, mask, ref_sem_feats=None,**_):
+    def forward(self, rgb_feat, neuray_feat, ray_diff, mask, ref_sem_feats=None,ref_sem_feats_dat=None,rgb_feat_dat=None):
         '''
         :param rgb_feat: rgbs and image features [n_rays, n_samples, n_views, n_feat]
         :param ray_diff: ray direction difference [n_rays, n_samples, n_views, 4], first 3 channels are directions,
@@ -784,7 +784,7 @@ class CRANet_v2(IBRNetWithNeuRay):
 
         
         
-    def forward(self, rgb_feat, neuray_feat, ray_diff, mask, ref_sem_feats=None,**_):
+    def forward(self, rgb_feat, neuray_feat, ray_diff, mask, ref_sem_feats=None,ref_sem_feats_dat=None,rgb_feat_dat=None):
         '''
         :param rgb_feat: rgbs and image features [n_rays, n_samples, n_views, n_feat]
         :param ray_diff: ray direction difference [n_rays, n_samples, n_views, 4], first 3 channels are directions,

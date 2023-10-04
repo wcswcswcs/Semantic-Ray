@@ -152,7 +152,7 @@ class SemanticLoss(Loss):
             ref_labels_pr = data_pr['ref_sem_pred'].permute(0, 2, 3, 1)
             ref_labels_gt = data_gt['ref_imgs_info']['labels'].permute(0, 2, 3, 1)
             ref_loss = compute_loss(ref_labels_pr, ref_labels_gt)
-            loss_2d = ref_loss * self.cfg['semantic_loss_2d_scale']
+            loss_2d = ref_loss * self.cfg.get('semantic_loss_2d_scale',0.)
             ret.update({
                 'loss_semantic_2d':loss_2d
             })

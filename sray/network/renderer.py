@@ -186,7 +186,8 @@ class BaseRenderer(nn.Module):
             prj_dict, ref_imgs_info, que_dists, is_fine)
         prj_dict = self.get_img_feats(ref_imgs_info, prj_dict)
         prj_dict['sem_feats'] = ref_imgs_info['img_feats']
-        prj_dict['sem_feats_dat'] = ref_imgs_info['img_feats_dat']
+        if 'img_feats_dat' in ref_imgs_info.keys():
+            prj_dict['sem_feats_dat'] = ref_imgs_info['img_feats_dat']
 
         nr_out = self.network_rendering(prj_dict, que_dir, is_fine )
         if self.cfg['render_label']:
@@ -262,11 +263,13 @@ class BaseRenderer(nn.Module):
 
     def render(self, que_imgs_info, ref_imgs_info, is_train):
         ref_img_feats = self.image_encoder(ref_imgs_info['imgs'])
-        _,ref_img_feats_dat = self.dat(ref_img_feats)
+        if self.use_dat:
+            _,ref_img_feats_dat = self.dat(ref_img_feats)
         
         # ref_sem_pred = self.sem_head_2d(ref_img_feats)
         ref_imgs_info['img_feats'] = ref_img_feats
-        ref_imgs_info['img_feats_dat'] = ref_img_feats_dat
+        if self.use_dat:
+            ref_imgs_info['img_feats_dat'] = ref_img_feats_dat
         ref_imgs_info['ray_feats'] = self.vis_encoder(
             ref_imgs_info['ray_feats'], ref_img_feats)
 
@@ -295,7 +298,8 @@ class BaseRenderer(nn.Module):
             render_info_all[k] = torch.cat(v, 1)
 
         # render_info['ref_sem_pred'] = ref_sem_pred
-        render_info_all['ref_img_feats_dat'] = ref_img_feats_dat
+        if self.use_dat:
+            render_info_all['ref_img_feats_dat'] = ref_img_feats_dat
 
         return render_info_all
 

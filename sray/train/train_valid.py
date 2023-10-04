@@ -3,7 +3,7 @@ import time
 import torch
 import numpy as np
 from tqdm import tqdm
-
+import wandb
 from sray.network.metrics import name2key_metrics
 from sray.train.train_tools import to_cuda
 
@@ -26,6 +26,7 @@ class ValidationEvaluator:
                 outputs=model(data)
                 for loss in losses:
                     loss_results=loss(outputs, data, step, data_index=data_i, model_name=model_name)
+                    wandb.log(loss_results)
                     for k,v in loss_results.items():
                         if type(v)==torch.Tensor:
                             v=v.detach().cpu().numpy()

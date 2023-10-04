@@ -224,6 +224,7 @@ class Trainer:
                     val_results[k] = [v]
         val_para /= len(self.val_set_list)
         print(val_results)
+        wandb.log(val_results)
         print('Key metric (mean): ', val_para)
         with open(os.path.join(self.model_dir, 'val_results.json'), 'w') as f:
             f.write(str(val_results).replace('\'', '\"'))
