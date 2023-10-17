@@ -4,7 +4,7 @@ project_name: sray
 # network
 
 init_net_type: depth
-use_hierarchical_sampling: true
+use_hierarchical_sampling: false
 use_depth_loss: false
 dist_decoder_cfg:
   use_vis: true
@@ -15,7 +15,7 @@ render_label: true
 num_classes: 20
 ignore_label: 20
 agg_net_cfg: {
-  network_name: CRANet_Def_IBR_v2,
+  network_name: CRANet_CV_IBR,
   label_hidden: [16],
   num_classes: 20,
   use_ptrans: true,
@@ -23,35 +23,27 @@ agg_net_cfg: {
   sem_only: true,
   color_cal_type: feat_pred, # 
 }
-fine_agg_net_cfg: {
-  network_name: CRANet_Def_IBR_v2,
-  label_hidden: [16],
-  num_classes: 20,
-  use_ptrans: true,
-  ptrans_first: false,
-  sem_only: true,
-  color_cal_type: feat_pred, # 
-}
+
 
 # loss
 loss: [render, semantic]
 render_loss_scale: 0.75
 semantic_loss_scale: 0.25
-semantic_loss_2d_scale: 0.1
+semantic_loss_2d_scale: 1.
 val_metric: [psnr_ssim, vis_img, iou, vis_sem]
 key_metric_name: miou
 use_dr_loss: false
 use_dr_fine_loss: false
-use_nr_fine_loss: true
+use_nr_fine_loss: false
 
 # lr
 load_pretrain: data/model/neuray_gen_depth/model_best.pth
 total_step: 600000
-val_interval: 50
+val_interval: 5000
 save_interval: 5000
 lr_type: exp_decay
 optimizer_type: adam
-max_grad_norm: 10
+max_grad_norm: 1
 lr_cfg:
   scale_new: 1.0
   lr_init: 1.0e-3
@@ -66,7 +58,9 @@ train_dataset_cfg:
   type2sample_weights: {scannet: 1}
   train_database_types: ['scannet']
   aug_pixel_center_sample: true
-  train_ray_num: 1024
+  train_ray_num:  1024 #32*32*N_patch
+  use_patch: false
+  patch_size: [32,32]
 val_set_list: configs/scannetv2_val_split.txt
 
 semantic_color_map: [
@@ -93,34 +87,45 @@ semantic_color_map: [
   [248, 166, 116],  # invalid
 ]
 
-DAT:
-    final_output: False
-    down_projs: True
-    img_size: [80,60]
-    patch_size: 1
-    num_classes: 21
-    in_dim: 32
+# aabb : [[-1, -1, -1], [1, 1, 1]],
+# near : 0.05,
+# far : 2.5,
+voxel_size : [.16, .16, .2]
+n_voxels : [40, 40, 16]
+aabb : [[-2.7, -2.7, -0.78], [3.7, 3.7, 1.78]]
+origin : [.0, .0, .5]
 
 
-    expansion: 4
-    dim_stem: 96
-    dims: [96, 192, 384, 768]
-    depths: [2, 4, 18, 2]
-    stage_spec: [[N, D], [N, D, N, D], [N, D, N, D, N, D, N, D, N, D, N, D, N, D, N, D, N, D], [D, D]]
-    heads: [3, 6, 12, 24]
-    window_sizes: [7, 7, 7, 7]
-    groups: [1, 2, 3, 6]
-    use_pes: [True, True, True, True]
-    dwc_pes: [False, False, False, False]
-    strides: [8, 4, 2, 1]
-    offset_range_factor: [-1, -1, -1, -1]
-    no_offs: [False, False, False, False]
-    fixed_pes: [False, False, False, False]
-    use_dwc_mlps: [True, True, True, True]
-    use_lpus: [True, True, True, True]
-    use_conv_patches: False
-    ksizes: [9, 7, 5, 3]
-    nat_ksizes: [7, 7, 7, 7]
-    drop_rate: 0.0
-    attn_drop_rate: 0.0
-    drop_path_rate: 0.4
+M2F:
+  config_file : '/home/chengshun.wang/pjs/mmsegmentation/m2f_pt/mask2former_r50_scannet_2d_240x320_pretrain.py'
+  checkpoint_file : '/home/chengshun.wang/pjs/mmsegmentation/m2f_pt/best_mIoU_iter_85000.pth'
+
+# DAT:
+#     final_output: False
+#     down_projs: True
+#     img_size: [80,60]
+#     patch_size: 1
+#     num_classes: 21
+#     in_dim: 32
+#     expansion: 4
+#     dim_stem: 96
+#     dims: [96, 192]
+#     depths: [2, 4, 18, 2]
+#     stage_spec: [[N, D], [N, D, N, D], ]
+#     heads: [3, 6, 12, 24]
+#     window_sizes: [7, 7, 7, 7]
+#     groups: [1, 2, 3, 6]
+#     use_pes: [True, True, True, True]
+#     dwc_pes: [False, False, False, False]
+#     strides: [8, 4, 2, 1]
+#     offset_range_factor: [-1, -1, -1, -1]
+#     no_offs: [False, False, False, False]
+#     fixed_pes: [False, False, False, False]
+#     use_dwc_mlps: [True, True, True, True]
+#     use_lpus: [True, True, True, True]
+#     use_conv_patches: False
+#     ksizes: [9, 7, 5, 3]
+#     nat_ksizes: [7, 7, 7, 7]
+#     drop_rate: 0.0
+#     attn_drop_rate: 0.0
+#     drop_path_rate: 0.4

@@ -11,7 +11,7 @@ from pprint import pprint
 import wandb
 from sray.dataset.train_dataset import RendererDataset
 from sray.network.loss import name2loss
-from sray.network.renderer import Renderer
+from sray.network.renderer_v2 import Renderer
 from sray.train.lr_common_manager import name2lr_manager
 from sray.network.metrics import name2metrics
 from sray.train.train_tools import to_cuda, Logger, reset_learning_rate, MultiGPUWrapper, DummyLoss

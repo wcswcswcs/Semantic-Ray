@@ -1,7 +1,7 @@
 import torch
 import torch.nn as nn
 
-from sray.network.cranet_v4 import *
+from sray.network.CRANet_CV_IBR import *
 
 
 def get_dir_diff(prj_dir, que_dir):
@@ -79,6 +79,8 @@ class SemanticAggregationNet(nn.Module):
 
         dir_diff = get_dir_diff(prj_dir, que_dir)
         valid_mask = prj_dict['mask']
+        depth_mask = prj_dict['depth_mask'][None,...,None].float()
+        valid_mask = valid_mask * depth_mask
         valid_mask = valid_mask.float()  # rfn,qn,rn,dn
         valid_mask = valid_mask.reshape(
             rfn, qn * rn, dn, -1).permute(1, 2, 0, 3)
@@ -102,7 +104,8 @@ class SemanticAggregationNet(nn.Module):
             ref_sem_feats = None
         ref_sem_feats_dat = prj_dict.get('sem_feats_dat',None)
         outs = self.agg_impl(prj_img_feats, prob_embedding,
-                             dir_diff, valid_mask, ref_sem_feats,ref_sem_feats_dat,prj_img_feats_dat)
+                             dir_diff, valid_mask, prj_dict
+                             )
 
         colors = outs[..., :3]  # qn*rn,dn,3
         density = outs[..., 3]  # qn*rn,dn,0

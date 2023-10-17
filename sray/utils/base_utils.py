@@ -7,11 +7,13 @@ import torch
 
 import numpy as np
 import pickle
-
+import random
+# from nerfstudio.data.utils.pixel_sampling_utils import erode_mask
 import yaml
 from plyfile import PlyData
 from skimage.io import imread
-
+from torch import Tensor
+from jaxtyping import Float
 #######################io#########################################
 from transforms3d.axangles import mat2axangle
 from transforms3d.euler import euler2mat
@@ -603,6 +605,63 @@ def get_coords_mask(que_mask, train_ray_num, foreground_ratio):
         coords = coords0
     return coords
 
+def sample_patch(
+        patch_size,
+        batch_size,
+        image_height,
+        image_width,
+        mask= None,
+        device= "cpu",
+    ):
+    if isinstance(mask, torch.Tensor):
+        sub_bs = batch_size // (patch_size[0]*patch_size[1])
+        half_patch_size = [int(patch_size[0] / 2),int(patch_size[1] / 2)]
+        m = erode_mask(mask.permute(0, 3, 1, 2).float(), pixel_radius=half_patch_size)
+        nonzero_indices = torch.nonzero(m[:, 0], as_tuple=False).to(device)
+        chosen_indices = random.sample(range(len(nonzero_indices)), k=sub_bs)
+        indices = nonzero_indices[chosen_indices]
+    
+        indices = (
+            indices.view(sub_bs, 1, 1, 2)
+            .broadcast_to(sub_bs, patch_size[0], patch_size[1], 2)
+            .clone()
+        )
+    
+        yys, xxs = torch.meshgrid(
+            torch.arange(patch_size[0], device=device), torch.arange(patch_size[1], device=device)
+        )
+        indices[:, ..., 0] += yys - half_patch_size[0]
+        indices[:, ..., 1] += xxs - half_patch_size[1]
+    
+        indices = torch.floor(indices).long()
+        indices = indices.flatten(0, 2)
+    else:
+        half_patch_size = torch.tensor([int(patch_size[0] / 2),int(patch_size[1] / 2)],device=device)
+        sub_bs = batch_size // (patch_size[0]*patch_size[1])
+        indices = torch.rand((sub_bs, 2), device=device) * torch.tensor(
+            [image_height , image_width],
+            device=device,
+        )+half_patch_size[None]
+        indices = torch.clamp(indices,max=torch.tensor([image_height,image_width])) 
+        indices = indices - torch.tensor([patch_size[0],patch_size[1]], device=device)[None]
+        indices = torch.clamp(indices,min=torch.tensor([0,0])) 
+        indices = (
+            indices.view(sub_bs, 1, 1, 2)
+            .broadcast_to(sub_bs, patch_size[0], patch_size[1], 2)
+            .clone()
+        )
+    
+        yys, xxs = torch.meshgrid(
+            torch.arange(patch_size[0], device=device), torch.arange(patch_size[1], device=device)
+        )
+        indices[:, ..., 0] += yys
+        indices[:, ..., 1] += xxs
+    
+        indices = torch.floor(indices).long()
+        indices = indices.flatten(0, 2)
+    
+    return indices
+
 
 def get_inverse_depth(depth_range, depth_num):
     near, far = depth_range
@@ -787,3 +846,46 @@ def save_depth(fn, depth, max_val=1000):
         writer = png.Writer(width=depth.shape[1], height=depth.shape[0], bitdepth=16, greyscale=True)
         zgray2list = depth.tolist()
         writer.write(f, zgray2list)
+
+def dilate(tensor: Float[Tensor, "bs 1 H W"], kernel_size=3) -> Float[Tensor, "bs 1 H W"]:
+    """Dilate a tensor with 0s and 1s. 0s will be be expanded based on the kernel size.
+
+    Args:
+        kernel_size: Size of the pooling region. Dilates/contracts 1 pixel if kernel_size is 3.
+    """
+
+    unique_vals = torch.unique(tensor)
+    if any(val not in (0, 1) for val in unique_vals) or tensor.dtype != torch.float32:
+        raise ValueError("Input tensor should contain only values 0 and 1, and should have dtype torch.float32.")
+
+    return torch.nn.functional.max_pool2d(tensor, kernel_size=kernel_size, stride=1, padding=(kernel_size - 1) // 2)
+
+def erode(tensor: Float[Tensor, "bs 1 H W"], kernel_size=3) -> Float[Tensor, "bs 1 H W"]:
+    """Erode a tensor with 0s and 1s. 1s will be expanded based on the kernel size.
+
+    Args:
+        kernel_size: Size of the pooling region. Erodes/expands 1 pixel if kernel_size is 3.
+    """
+
+    unique_vals = torch.unique(tensor)
+    if any(val not in (0, 1) for val in unique_vals) or tensor.dtype != torch.float32:
+        raise ValueError("Input tensor should contain only values 0 and 1, and should have dtype torch.float32.")
+
+    x = 1 - dilate(1 - tensor, kernel_size=kernel_size)
+    # set edge pixels to 0
+    p = (kernel_size - 1) // 2
+    x[:, :, :p, :] *= 0
+    x[:, :, :, :p] *= 0
+    x[:, :, -p:, :] *= 0
+    x[:, :, :, -p:] *= 0
+    return x
+
+def erode_mask(tensor: Float[Tensor, "bs 1 H W"], pixel_radius: int = 1):
+    """Erode a mask. Expands 1 values to nearby pixels with a max pooling operation.
+    A pixel radius of 1 will also extend the 1s along the diagonal.
+
+    Args:
+        pixel_radius: The number of pixels away from valid pixels (1s) that we may sample.
+    """
+    kernel_size = 1 + 2 * pixel_radius
+    return erode(tensor, kernel_size=kernel_size)

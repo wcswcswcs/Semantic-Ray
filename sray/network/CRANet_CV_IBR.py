@@ -6,11 +6,12 @@ import einops
 from einops import rearrange, reduce, repeat
 from sray.network.cranet import *
 from sray.network.cranet_v3 import *
+from sray.network.cranet_v4 import *
 from timm.models.layers import to_2tuple, trunc_normal_
 from sray.network.ops import Conv2DMod, conv, has_nan
 
 
-class CRANet_Def_IBR_v3(IBRNetWithNeuRay):
+class CRANet_CV_IBR(IBRNetWithNeuRay):
     def __init__(self,
                  neuray_in_dim=32,
                  in_feat_ch=32,
@@ -58,17 +59,22 @@ class CRANet_Def_IBR_v3(IBRNetWithNeuRay):
         self.relu = nn.ReLU()
         self.sem_fuse = nn.Linear(64,32)
         #####
-        self.ds_ref_img_f = nn.Sequential(
-            conv(32,32,3,2),
-            nn.ELU() ,
-            conv(32,32,3,2),
-            nn.ELU() ,
-            conv(32,32,3,5)
-        )
+        # self.ds_ref_img_f = nn.Sequential(
+        #     conv(32,32,3,2),
+        #     nn.ELU(inplace=True),
+        #     conv(32,32,3,2),
+        #     nn.ELU(inplace=True),
+        #     conv(32,32,3,5)
+        # )
         self.pos_encoding_2 = self.posenc(d_hid=32, n_samples=self.n_samples)
-        self.sem_w_fc = nn.Sequential(
+        self.sem_w_fc1 = nn.Sequential(
           nn.Linear(32,16) ,
-          nn.ELU() ,
+          nn.ELU(inplace=True),
+          nn.Linear(16,1) ,
+        )
+        self.sem_w_fc2 = nn.Sequential(
+          nn.Linear(32,16) ,
+          nn.ELU(inplace=True),
           nn.Linear(16,1) ,
         )
         self.sem_fc = nn.Sequential(
@@ -78,15 +84,19 @@ class CRANet_Def_IBR_v3(IBRNetWithNeuRay):
 
         if self.color_cal_type != 'rgb_in':
             self.rgb_out = nn.Sequential(nn.Linear(32+1+4, 32),
-                                        nn.ELU(),
+                                        nn.ELU(inplace=True),
                                         nn.Dropout(0.2),
                                         nn.Linear(32, 16),
-                                        nn.ELU(),
+                                        nn.ELU(inplace=True),
                                         nn.Dropout(0.2),
                                         nn.Linear(16, 3),
                                         nn.Sigmoid())
         self.dattn = DAttention_v2((15,20),None,4,8,4,0.1,0.1,1, 1.0 ,False,False,False,False,3,False)
 
+        self.m2f_feat_prj = nn.Linear(256*3, 32)
+        self.global_volume_prj = nn.Linear(256*3,32)
+        
+        self.global_volume_fc = nn.Linear(32, 16)
         
         
     def forward(self, rgb_feat, neuray_feat, ray_diff, mask, prj_dict):
@@ -97,7 +107,16 @@ class CRANet_Def_IBR_v3(IBRNetWithNeuRay):
         :param mask: mask for whether each projection is valid or not. [n_rays, n_samples, n_views, 1]
         :return: rgb and density output, [n_rays, n_samples, 4]
         '''
-        rgb_feat_dat = prj_dict['rgb_feat_dat']
+        rn,dn,rfn,_ = rgb_feat.shape
+        global_volume_feats = prj_dict['global_volume_feats'].squeeze(1).permute(1,2,0,3) # rn,dn,rfn,_
+        global_volume_feats = self.global_volume_prj(global_volume_feats)[:,:,0]
+        seg_logits = prj_dict['seg_logits'].permute(1,0,2).reshape((rn,dn,rfn,-1))
+        m2f_feats = []
+        for f in prj_dict['mlvl_feats']:
+            f = f.permute(1,0,2).reshape((rn,dn,rfn,-1))
+            m2f_feats.append(f)
+        m2f_feats = torch.cat(m2f_feats,-1)
+        
         num_views = rgb_feat.shape[2]
         direction_feat = self.ray_dir_fc(ray_diff)
         rgb_in = rgb_feat[..., :3]
@@ -138,7 +157,7 @@ class CRANet_Def_IBR_v3(IBRNetWithNeuRay):
         mean, var = fused_mean_variance(x, weight)
         globalfeat = torch.cat([mean.squeeze(2), var.squeeze(
             2), weight.mean(dim=2)], dim=-1)  # [n_rays, n_samples, 32*2+1]
-        globalfeat = self.geometry_fc(globalfeat)  # [n_rays, n_samples, 16]
+        globalfeat = self.geometry_fc(globalfeat) + self.global_volume_fc(global_volume_feats)  # [n_rays, n_samples, 16]
         num_valid_obs = torch.sum(mask, dim=2)
         globalfeat = globalfeat + self.pos_encoding
         globalfeat, _ = self.ray_attention(globalfeat, globalfeat, globalfeat,
@@ -166,7 +185,7 @@ class CRANet_Def_IBR_v3(IBRNetWithNeuRay):
         # ], dim=-1)
 
         # sem_feat = self.sem_fc(sem_feat)
-        sem_feat = rgb_feat_dat
+        sem_feat = self.m2f_feat_prj(m2f_feats) + sem_latent #rgb_feat_dat
         # b, n, v, f = sem_feat.shape
         # sem_feat = sem_feat.permute(0, 2, 1, 3).reshape(-1, n, f)
         # ref_sem_feats_ds = self.ds_ref_img_f(ref_sem_feats_dat)
@@ -230,14 +249,17 @@ class CRANet_Def_IBR_v3(IBRNetWithNeuRay):
         ], dim=-1)
 
         sem_feat = self.sem_fc(sem_feat)
-        x = self.sem_w_fc(sem_feat)
+        x = self.sem_w_fc1(sem_feat)
         
-        # blending_weights_sem = F.softmax(x, dim=2)  # color blending
-        sem_feat = torch.sum(sem_feat * blending_weights_valid, dim=2)
+        blending_weights_sem1 = F.softmax(x, dim=2)  # color blending
+        blending_weights_sem2 = self.sem_w_fc2(sem_feat).softmax(2)
+        sem_feat = torch.sum(sem_feat * blending_weights_sem1, dim=2)
+        seg_logits = torch.sum(seg_logits * blending_weights_sem2, dim=2)
         sem_feat = sem_feat + self.pos_encoding_2
         sem_feat, _ = self.ray_attention_2(sem_feat, sem_feat, sem_feat,
                                            mask=(num_valid_obs > 1).float())  # [n_rays, n_samples, 16]
-        sem_feat = self.sem_out(sem_feat)
+        
+        sem_feat = self.sem_out(sem_feat) + seg_logits
         # sem_feat = sem_feat.masked_fill(num_valid_obs < 1, 0.)
 
         
@@ -253,6 +275,7 @@ name2network = {
     'CRANet_Def_IBR':CRANet_Def_IBR,
     'CRANet_Def_IBR_v2':CRANet_Def_IBR_v2,
     'CRANet_Def_IBR_v3':CRANet_Def_IBR_v3,
+    'CRANet_CV_IBR':CRANet_CV_IBR,
     # 'CRANet_Def_2':CRANet_Def_2,
     'IBRNet':IBRNet,
     'IBRNetWithNeuRay':IBRNetWithNeuRay,

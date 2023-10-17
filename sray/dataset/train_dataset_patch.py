@@ -254,10 +254,14 @@ class RendererDataset(Dataset):
                 hb, he = int(h*begin_ratio), int(h*(center_ratio+begin_ratio))
                 wb, we = int(w*begin_ratio), int(w*(center_ratio+begin_ratio))
                 que_mask_cur[hb:he,wb:we] = True
-                coords = get_coords_mask(que_mask_cur, self.cfg['train_ray_num'], 0.9).reshape([1, -1, 2])
+                if not self.cfg.use_patch:
+                    coords = get_coords_mask(que_mask_cur, self.cfg['train_ray_num'], 0.9).reshape([1, -1, 2])
+                else:
+                    coords = sample_patch(self.cfg['patch_size'],self.cfg['train_ray_num'],h,w).flip(-1).cpu().numpy().reshape([1,-1,2])
         else:
             que_mask_cur = que_imgs_info['masks'][0,0]>0
-            coords = get_coords_mask(que_mask_cur, self.cfg['train_ray_num'], self.cfg['foreground_ratio']).reshape([1,-1,2])
+            # coords = get_coords_mask(que_mask_cur, self.cfg['train_ray_num'], self.cfg['foreground_ratio']).reshape([1,-1,2])
+            coords = sample_patch(self.cfg['patch_size'],self.cfg['train_ray_num'],h,w).flip(-1).cpu().numpy().reshape([1,-1,2])
         return coords
 
     def consistent_depth_range(self, ref_imgs_info, que_imgs_info):

@@ -1,5 +1,17 @@
 import torch
+import torch.nn.functional as F
 from sray.network.ops import interpolate_feats
+import einops
+import os
+from torch.utils.cpp_extension import load
+cuda_dir = os.path.join(os.path.dirname(__file__), "cuda")
+raymarch_kernel = load(name='raymarch_kernel',
+                       extra_cuda_cflags=[],
+                       sources=[f'{cuda_dir}/raymarcher.cpp',
+                                f'{cuda_dir}/raymarcher.cu'])
+
+
+
 
 def coords2rays(coords, poses, Ks):
     """
@@ -136,6 +148,7 @@ def project_points_dict(ref_imgs_info, que_pts):
     rfn, _, h, w = ref_imgs_info['imgs'].shape
     prj_ray_feats = interpolate_feature_map(ref_imgs_info['ray_feats'], prj_pts, prj_mask, h, w)
     prj_rgb = interpolate_feature_map(ref_imgs_info['imgs'], prj_pts, prj_mask, h, w)
+    
     if 'sem_feats' in ref_imgs_info:
         prj_sem_feats = interpolate_feature_map(ref_imgs_info['sem_feats'], prj_pts, prj_mask, h, w)
         prj_dict = {
@@ -148,7 +161,27 @@ def project_points_dict(ref_imgs_info, que_pts):
             'sem_feats': prj_sem_feats,
         }
     else:
-        prj_dict = {'dir':prj_dir, 'pts':prj_pts, 'depth':prj_depth, 'mask': prj_mask.float(), 'ray_feats':prj_ray_feats, 'rgb':prj_rgb}
+        prj_dict = {
+            'dir':prj_dir, 'pts':prj_pts, 'depth':prj_depth, 
+            'mask': prj_mask.float(), 'ray_feats':prj_ray_feats, 'rgb':prj_rgb}
+    ret = {}
+    if 'seg_logits' in ref_imgs_info:
+        seg_logits = interpolate_feature_map(ref_imgs_info['seg_logits'], prj_pts, prj_mask, h, w)
+        ret['seg_logits'] = seg_logits
+    if 'global_volume' in ref_imgs_info:
+        n_ref = ref_imgs_info['imgs'].shape[0]
+        aabb = ref_imgs_info['aabb']
+        min_ = aabb[0]
+        max_ = aabb[1]
+        qn,rn,dn,_  = que_pts.shape
+        ind = que_pts.reshape((-1,3)) #(qn rn dn) 3 qn:1
+        ind = (ind - min_)/(max_ - min_)
+        ind = ind*2-1.
+        global_volume = ref_imgs_info['global_volume'].permute(0,1,4,3,2)
+        global_volume_feats = F.grid_sample(global_volume,ind[None,None,None],mode='bilinear')
+        global_volume_feats = global_volume_feats.reshape((rn,1,dn,-1)).repeat(1,n_ref,1,1)
+        ret['global_volume_feats'] = global_volume_feats # rn n_ref dn c
+    prj_dict.update(ret)
 
     # post process
     for k, v in prj_dict.items():
@@ -180,6 +213,45 @@ def sample_depth(depth_range, coords, sample_num, random_sample):
     que_depth = 1 / (1 / near[:, None, None] + ticks)  # qn, dn,
     que_dists = torch.cat([que_depth[...,1:],torch.full([*que_depth.shape[:-1],1],1e6,dtype=torch.float32,device=device)],-1) - que_depth
     return que_depth, que_dists # qn, rn, dn
+
+def sample_depth_from_density_volume(density_volume, que_imgs_info, depth_sample_num,random_sample=False):
+    """
+    :param depth_range: qn,2
+    :param sample_num:
+    :param random_sample:
+    :return:
+    """
+    (depth_range, coords, poses,Ks,aabb) = (
+                                        que_imgs_info['depth_range'], 
+                                        que_imgs_info['coords'], 
+                                        que_imgs_info['poses'],
+                                        que_imgs_info['Ks'],
+                                        que_imgs_info['aabb'],
+                                        )
+    qn, rn, _ = coords.shape
+    device = coords.device
+    near, far = depth_range[:,0], depth_range[:,1] # qn,2
+    density_volume = density_volume.sigmoid()[0]
+
+
+    rays_o, rays_d = coords2rays(coords, poses, Ks)
+    rays_d = rays_d/torch.norm(rays_d, dim=2, keepdim=True)
+    rays_d = rays_d.reshape(-1,3)
+    rays_o = rays_o.reshape(-1,3)
+    near = near.reshape((1,)).repeat((rn,))
+    far = far.reshape((1,)).repeat((rn,))
+    step = torch.tensor([1e-3]).repeat((rn,)).to(rays_o.device)
+    z = raymarch_kernel.raymarch_train(rays_o, rays_d, near, far,
+                                                density_volume.gt(0.1), aabb[1]-aabb[0], aabb[0],
+                                                step, depth_sample_num)
+
+    
+    que_depth = z.reshape(qn,rn,-1) 
+
+    return que_depth
+
+
+
 
 def sample_fine_depth(depth, hit_prob, depth_range, sample_num, random_sample, inv_mode=True):
     """

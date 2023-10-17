@@ -80,6 +80,7 @@ class ScannetDatabase(BaseDatabase):
             self.img_ids.append(f'{i}')
 
         self.img_id2imgs = {}
+        # self.img_id2imgs_mmseg = {}
         # mapping from scanntet class id to nyu40 class id
         mapping_file = 'data/scannet/scannetv2-labels.combined.tsv'
         mapping_file = pd.read_csv(mapping_file, sep='\t', header=0)
@@ -105,14 +106,38 @@ class ScannetDatabase(BaseDatabase):
                 img, self.ratio), (self.w, self.h), interpolation=cv2.INTER_LINEAR)
 
         return img
+    def get_image_for_mmseg(self, img_id):
+
+        img_path = os.path.join(
+            self.root_dir, 'color', f'{int(img_id)}.jpg')
+        img = cv2.imread(img_path)
+        if self.w != 1296:
+            img = cv2.resize(downsample_gaussian_blur(
+                img, self.ratio), (self.w, self.h), interpolation=cv2.INTER_LINEAR)
+
+        return img
 
     def get_K(self, img_id):
         return self.K.astype(np.float32)
+    
+    def get_axis_align_matrix(self):
+        meta_file = os.path.join(self.root_dir, f"{self.scene_name}.txt")
+        lines = open(meta_file).readlines()
+        axis_align_matrix = None
+        for line in lines:
+            if 'axisAlignment' in line:
+                axis_align_matrix = [float(x) for x in line.rstrip().strip('axisAlignment = ').split(' ')]
+
+        if axis_align_matrix != None:
+            axis_align_matrix = np.array(axis_align_matrix).reshape((4, 4)) # 转换偏移矩阵
+        return axis_align_matrix
+
 
     def get_pose(self, img_id):
+        m  =self.get_axis_align_matrix()
         pose = np.loadtxt(
-            f'{self.root_dir}/pose/{int(img_id)}.txt').reshape([4, 4])[:3, :]
-        pose = pose_inverse(pose)
+            f'{self.root_dir}/pose/{int(img_id)}.txt').reshape([4, 4])
+        pose = pose_inverse((m@pose)[:3, :])
         return pose.copy()
 
     def get_img_ids(self, check_depth_exist=False):

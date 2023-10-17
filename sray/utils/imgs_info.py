@@ -78,14 +78,16 @@ def build_imgs_info(database, ref_ids, pad_interval=-1, is_aligned=True, align_d
     if not is_aligned:
         assert has_depth
         rfn = len(ref_ids)
-        ref_imgs, ref_labels, ref_masks, ref_depths, shapes = [], [], [], [], []
+        ref_imgs, ref_labels, ref_masks, ref_depths, shapes,ref_imgs_mmseg = [], [], [], [], [],[]
         for ref_id in ref_ids:
             img = database.get_image(ref_id)
+            img_mmseg = database.get_image_for_mmseg(ref_id)
             if add_label:
                 label = database.get_label(ref_id)
                 ref_labels.append(label)
             shapes.append([img.shape[0], img.shape[1]])
             ref_imgs.append(img)
+            ref_imgs_mmseg.append(img_mmseg)
             ref_masks.append(database.get_mask(ref_id))
             ref_depths.append(database.get_depth(ref_id))
 
@@ -93,15 +95,18 @@ def build_imgs_info(database, ref_ids, pad_interval=-1, is_aligned=True, align_d
         th, tw = np.max(shapes, 0)
         for rfi in range(rfn):
             ref_imgs[rfi] = pad_img_end(ref_imgs[rfi], th, tw, 'reflect')
+            ref_imgs_mmseg[rfi] = pad_img_end(ref_imgs_mmseg[rfi], th, tw, 'reflect')
             ref_labels[rfi] = pad_img_end(ref_labels[rfi], th, tw, 'reflect')
             ref_masks[rfi] = pad_img_end(ref_masks[rfi][:, :, None], th, tw, 'constant', 0)[..., 0]
             ref_depths[rfi] = pad_img_end(ref_depths[rfi][:, :, None], th, tw, 'constant', 0)[..., 0]
         ref_imgs = color_map_forward(np.stack(ref_imgs, 0)).transpose([0, 3, 1, 2])
+        # ref_imgs_mmseg = color_map_forward(np.stack(ref_imgs_mmseg, 0)).transpose([0, 3, 1, 2])
         ref_labels = np.stack(ref_labels, 0).transpose([0, 3, 1, 2])
         ref_masks = np.stack(ref_masks, 0)[:, None, :, :]
         ref_depths = np.stack(ref_depths, 0)[:, None, :, :]
     else:
         ref_imgs = color_map_forward(np.asarray([database.get_image(ref_id) for ref_id in ref_ids])).transpose([0, 3, 1, 2])
+        ref_imgs_mmseg = [database.get_image_for_mmseg(ref_id) for ref_id in ref_ids]
         ref_labels = np.asarray([database.get_label(ref_id) for ref_id in ref_ids])[:, None, :, :]
         ref_masks =  np.asarray([database.get_mask(ref_id) for ref_id in ref_ids], dtype=np.float32)[:, None, :, :]
         if has_depth:
@@ -120,6 +125,7 @@ def build_imgs_info(database, ref_ids, pad_interval=-1, is_aligned=True, align_d
         ref_depth_range[:,0]=np.min(ref_depth_range[:,0])
         ref_depth_range[:,1]=np.max(ref_depth_range[:,1])
     ref_imgs_info = {
+        'imgs_mmseg':ref_imgs_mmseg,
         'imgs': ref_imgs, 
         'poses': ref_poses, 
         'Ks': ref_Ks, 

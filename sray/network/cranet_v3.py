@@ -441,7 +441,7 @@ class CRANet_Def(IBRNetWithNeuRay):
 
         
         
-    def forward(self, rgb_feat, neuray_feat, ray_diff, mask, ref_sem_feats=None,ref_sem_feats_dat=None,rgb_feat_dat=None):
+    def forward(self, rgb_feat, neuray_feat, ray_diff, mask, prj_dict):
         '''
         :param rgb_feat: rgbs and image features [n_rays, n_samples, n_views, n_feat]
         :param ray_diff: ray direction difference [n_rays, n_samples, n_views, 4], first 3 channels are directions,
@@ -449,7 +449,7 @@ class CRANet_Def(IBRNetWithNeuRay):
         :param mask: mask for whether each projection is valid or not. [n_rays, n_samples, n_views, 1]
         :return: rgb and density output, [n_rays, n_samples, 4]
         '''
-
+        ref_sem_feats = prj_dict['ref_sem_feats']
         num_views = rgb_feat.shape[2]
         direction_feat = self.ray_dir_fc(ray_diff)
         rgb_in = rgb_feat[..., :3]
@@ -663,7 +663,7 @@ class CRANet_Def_IBR(IBRNetWithNeuRay):
 
         
         
-    def forward(self, rgb_feat, neuray_feat, ray_diff, mask, ref_sem_feats=None,ref_sem_feats_dat=None,rgb_feat_dat=None):
+    def forward(self, rgb_feat, neuray_feat, ray_diff, mask,prj_dict ):
         '''
         :param rgb_feat: rgbs and image features [n_rays, n_samples, n_views, n_feat]
         :param ray_diff: ray direction difference [n_rays, n_samples, n_views, 4], first 3 channels are directions,
@@ -671,7 +671,7 @@ class CRANet_Def_IBR(IBRNetWithNeuRay):
         :param mask: mask for whether each projection is valid or not. [n_rays, n_samples, n_views, 1]
         :return: rgb and density output, [n_rays, n_samples, 4]
         '''
-
+        ref_sem_feats = prj_dict['ref_sem_feats']
         num_views = rgb_feat.shape[2]
         direction_feat = self.ray_dir_fc(ray_diff)
         rgb_in = rgb_feat[..., :3]
@@ -897,7 +897,7 @@ class CRANet_Def_IBR_v2(IBRNetWithNeuRay):
 
         
         
-    def forward(self, rgb_feat, neuray_feat, ray_diff, mask, ref_sem_feats=None,ref_sem_feats_dat=None,rgb_feat_dat=None):
+    def forward(self, rgb_feat, neuray_feat, ray_diff, mask, prj_dict):
         '''
         :param rgb_feat: rgbs and image features [n_rays, n_samples, n_views, n_feat]
         :param ray_diff: ray direction difference [n_rays, n_samples, n_views, 4], first 3 channels are directions,
@@ -905,7 +905,8 @@ class CRANet_Def_IBR_v2(IBRNetWithNeuRay):
         :param mask: mask for whether each projection is valid or not. [n_rays, n_samples, n_views, 1]
         :return: rgb and density output, [n_rays, n_samples, 4]
         '''
-
+        ref_sem_feats_dat= prj_dict['ref_sem_feats_dat']
+        rgb_feat_dat=prj_dict['rgb_feat_dat']
         num_views = rgb_feat.shape[2]
         direction_feat = self.ray_dir_fc(ray_diff)
         rgb_in = rgb_feat[..., :3]
