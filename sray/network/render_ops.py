@@ -9,9 +9,23 @@ raymarch_kernel = load(name='raymarch_kernel',
                        extra_cuda_cflags=[],
                        sources=[f'{cuda_dir}/raymarcher.cpp',
                                 f'{cuda_dir}/raymarcher.cu'])
+from torch.autograd import Function
+from torch.cuda.amp import custom_bwd, custom_fwd
 
+class _trunc_exp(Function):
+    @staticmethod
+    @custom_fwd(cast_inputs=torch.float)
+    def forward(ctx, x):
+        ctx.save_for_backward(x)
+        return torch.exp(x)
 
+    @staticmethod
+    @custom_bwd
+    def backward(ctx, g):
+        x = ctx.saved_tensors[0]
+        return g * torch.exp(x.clamp(-15, 15))
 
+trunc_exp = _trunc_exp.apply
 
 def coords2rays(coords, poses, Ks):
     """
@@ -166,6 +180,7 @@ def project_points_dict(ref_imgs_info, que_pts):
             'mask': prj_mask.float(), 'ray_feats':prj_ray_feats, 'rgb':prj_rgb}
     ret = {}
     if 'seg_logits' in ref_imgs_info:
+        
         seg_logits = interpolate_feature_map(ref_imgs_info['seg_logits'], prj_pts, prj_mask, h, w)
         ret['seg_logits'] = seg_logits
     if 'global_volume' in ref_imgs_info:
@@ -178,9 +193,22 @@ def project_points_dict(ref_imgs_info, que_pts):
         ind = (ind - min_)/(max_ - min_)
         ind = ind*2-1.
         global_volume = ref_imgs_info['global_volume'].permute(0,1,4,3,2)
-        global_volume_feats = F.grid_sample(global_volume,ind[None,None,None],mode='bilinear')
+        global_volume_feats = F.grid_sample(global_volume,ind[None,None,None],mode='bilinear',align_corners=True)
         global_volume_feats = global_volume_feats.reshape((rn,1,dn,-1)).repeat(1,n_ref,1,1)
         ret['global_volume_feats'] = global_volume_feats # rn n_ref dn c
+    if 'density_volume' in ref_imgs_info:
+        n_ref = ref_imgs_info['imgs'].shape[0]
+        aabb = ref_imgs_info['aabb']
+        min_ = aabb[0]
+        max_ = aabb[1]
+        qn,rn,dn,_  = que_pts.shape
+        ind = que_pts.reshape((-1,3)) #(qn rn dn) 3 qn:1
+        ind = (ind - min_)/(max_ - min_)
+        ind = ind*2-1.
+        density_volume = ref_imgs_info['density_volume'].permute(0,1,4,3,2)
+        density_coarse = F.grid_sample(density_volume,ind[None,None,None],mode='bilinear',align_corners=True)
+        density_coarse = density_coarse.reshape((rn,1,dn,-1)).repeat(1,n_ref,1,1)
+        ret['density_coarse'] = density_coarse # rn n_ref dn c
     prj_dict.update(ret)
 
     # post process
@@ -214,6 +242,25 @@ def sample_depth(depth_range, coords, sample_num, random_sample):
     que_dists = torch.cat([que_depth[...,1:],torch.full([*que_depth.shape[:-1],1],1e6,dtype=torch.float32,device=device)],-1) - que_depth
     return que_depth, que_dists # qn, rn, dn
 
+
+def near_far_from_aabb(rays_o, rays_d, aabb, min_near=0.05):
+    # rays: [N, 3], [N, 3]
+    # bound: int, radius for ball or half-edge-length for cube
+    # return near [N, 1], far [N, 1]
+
+    tmin = (aabb[1] - rays_o) / (rays_d + 1e-15) # [N, 3]
+    tmax = (aabb[0]  - rays_o) / (rays_d + 1e-15)
+    near = torch.where(tmin < tmax, tmin, tmax).amax(dim=-1, keepdim=True)
+    far = torch.where(tmin > tmax, tmin, tmax).amin(dim=-1, keepdim=True)
+    # if far < near, means no intersection, set both near and far to inf (1e9 here)
+    mask = far < near
+    near[mask] = 1e9
+    far[mask] = 1e9
+    # restrict near to a minimal value
+    near = torch.clamp(near, min=min_near)
+
+    return near, far
+
 def sample_depth_from_density_volume(density_volume, que_imgs_info, depth_sample_num,random_sample=False):
     """
     :param depth_range: qn,2
@@ -231,7 +278,11 @@ def sample_depth_from_density_volume(density_volume, que_imgs_info, depth_sample
     qn, rn, _ = coords.shape
     device = coords.device
     near, far = depth_range[:,0], depth_range[:,1] # qn,2
-    density_volume = density_volume.sigmoid()[0]
+    replacement_value = 0.0
+    density_volume = torch.where(torch.isnan(density_volume), replacement_value, density_volume)
+    density_volume = trunc_exp(density_volume)[0]
+    density_volume = 1 - torch.exp(-density_volume)
+    # density_volume = torch.clamp(density_volume,min=0.3,max=1.)
 
 
     rays_o, rays_d = coords2rays(coords, poses, Ks)
@@ -240,10 +291,12 @@ def sample_depth_from_density_volume(density_volume, que_imgs_info, depth_sample
     rays_o = rays_o.reshape(-1,3)
     near = near.reshape((1,)).repeat((rn,))
     far = far.reshape((1,)).repeat((rn,))
-    step = torch.tensor([1e-3]).repeat((rn,)).to(rays_o.device)
-    z = raymarch_kernel.raymarch_train(rays_o, rays_d, near, far,
+    # near,far= near_far_from_aabb(rays_o, rays_d, aabb)
+    # step = (far-near)/100.
+    step = torch.tensor([3e-3]).repeat((rn,)).to(rays_o.device)
+    z = raymarch_kernel.raymarch_train(rays_o, rays_d, near.squeeze(-1), far.squeeze(-1),
                                                 density_volume.gt(0.1), aabb[1]-aabb[0], aabb[0],
-                                                step, depth_sample_num)
+                                                step.squeeze(-1), depth_sample_num)
 
     
     que_depth = z.reshape(qn,rn,-1) 

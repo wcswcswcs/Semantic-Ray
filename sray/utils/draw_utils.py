@@ -7,7 +7,7 @@ import cv2
 import matplotlib.pyplot as plt
 import matplotlib.lines as mlines
 from matplotlib import cm
-
+import plotly.graph_objects as go
 from sklearn.decomposition import PCA
 from sklearn.manifold import TSNE
 
@@ -248,6 +248,50 @@ def draw_points(img,points):
     img[pts[:,1],pts[:,0]]=255
     # img[pts[:,1],pts[:,0]]+=np.asarray([127,0,0],np.uint8)[None,:]
     return img
+def draw_aabb(aabb_min = [-2.7, -2.7, -0.78],aabb_max = [3.7, 3.7, 1.78]):
+    
+    # 定义AABB范围
+      # 最小点
+      # 最大点
+    
+    # 创建3D场景
+    fig = go.Figure()
+    
+    # 绘制AABB框
+    fig.add_trace(go.Scatter3d(
+        x=[aabb_min[0], aabb_max[0], aabb_max[0], aabb_min[0], aabb_min[0],
+           aabb_min[0], aabb_max[0], aabb_max[0], aabb_min[0], aabb_min[0],
+           aabb_min[0], aabb_max[0], aabb_max[0], aabb_max[0], aabb_min[0], aabb_min[0]],
+        y=[aabb_min[1], aabb_min[1], aabb_max[1], aabb_max[1], aabb_min[1],
+           aabb_min[1], aabb_min[1], aabb_max[1], aabb_max[1], aabb_max[1],
+           aabb_min[1], aabb_min[1], aabb_min[1], aabb_max[1], aabb_max[1], aabb_max[1]],
+        z=[aabb_min[2], aabb_min[2], aabb_min[2], aabb_min[2], aabb_min[2],
+           aabb_max[2], aabb_max[2], aabb_max[2], aabb_max[2], aabb_max[2],
+           aabb_max[2], aabb_max[2], aabb_min[2], aabb_min[2], aabb_max[2], aabb_max[2]],
+        mode='lines',
+        line=dict(color='red'),
+        name='AABB'
+    ))
+    return fig
+
+
+def draw_cam(fig,cams):
+    camera_x, camera_y, camera_z = zip(*cams)
+    fig.add_trace(go.Scatter3d(
+        x=camera_x,
+        y=camera_y,
+        z=camera_z,
+        mode='markers',
+        marker=dict(size=5, color='blue'),
+        name='Camera Positions'
+    ))
+
+    # 设置图形布局
+    fig.update_layout(scene=dict(aspectmode="data"))
+
+    # 显示图形
+    return fig
+
 
 def draw_bbox(img,bbox,color=None):
     if color is not None:

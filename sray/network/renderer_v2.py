@@ -52,7 +52,7 @@ class BaseRenderer(nn.Module):
         self.dist_decoder = name2dist_decoder[self.cfg['dist_decoder_type']](
             self.cfg['dist_decoder_cfg'])
         self.image_encoder = ResUNetLight(3, [1, 2, 6, 4], 32, inplanes=16)
-        self.m2f = get_m2f(self.cfg['M2F'])
+        # self.m2f = get_m2f(self.cfg['M2F'])
         self.use_dat = True if 'DAT' in cfg.keys() else False
         if self.use_dat:
             self.dat = DAT(**cfg['DAT'])
@@ -71,10 +71,9 @@ class BaseRenderer(nn.Module):
         self.mean_mapping = nn.ModuleList([nn.Conv3d(256,128 , kernel_size=1) for _ in range(3)])
         self.cov_mapping = nn.ModuleList([nn.Conv3d(256,128 , kernel_size=1) for _ in range(3)])
         self.mapping = nn.ModuleList([nn.Conv3d(256,256 , kernel_size=1) for _ in range(3)])
-        self.necks_3d = nn.ModuleList([
-                            FastIndoorImVoxelNeck(
+        self.necks_3d = FastIndoorImVoxelNeck(
                                 (256+3)*2,[1, 1, 1],256
-                            ) for _ in range(3)])
+                            )
         
         self.agg_net = name2agg_net[self.cfg['agg_net_type']](
             self.cfg['agg_net_cfg'])
@@ -145,7 +144,7 @@ class BaseRenderer(nn.Module):
         if 'mlvl_feats' in ref_imgs_info:
             m2f_feats = []
             for i in ref_imgs_info['mlvl_feats']:
-                h,w = i.shape[-2:]
+                # h,w = i.shape[-2:]
                 m2f_feats.append(interpolate_feature_map(i, pts, mask, h, w,))
             prj_dict[key] = m2f_feats
 
@@ -195,15 +194,20 @@ class BaseRenderer(nn.Module):
             density, colors = agg_net_out
             label = None
 
-        alpha_values = 1.0 - torch.exp(-torch.relu(density))
+        alpha_values = 1.0 - torch.exp(-trunc_exp(density))
         hit_prob = alpha_values2hit_prob(alpha_values)
         pixel_colors = torch.sum(hit_prob.unsqueeze(-1)*colors, 2)
 
+        # alpha_values_c = 1.0 - torch.exp(-trunc_exp(prj_dict['density_coarse'].squeeze(1).squeeze(-1)))
+        # hit_prob_c = alpha_values2hit_prob(alpha_values_c)
+        # pixel_colors_c = torch.sum(hit_prob_c.unsqueeze(-1)*colors, 2)
+        # pixel_colors_c =None
+
         if render_label:
             pixel_label = torch.sum(hit_prob.unsqueeze(-1)*label, 2)
-            return hit_prob, colors, pixel_colors, label, pixel_label
+            return hit_prob, colors, pixel_colors, label, pixel_label#,pixel_colors_c
         else:
-            return hit_prob, colors, pixel_colors
+            return hit_prob, colors, pixel_colors#,pixel_colors_c
 
     def render_by_depth(self, que_depth, que_imgs_info, ref_imgs_info, is_train, is_fine):
         ref_imgs_info = ref_imgs_info.copy()
@@ -228,10 +232,11 @@ class BaseRenderer(nn.Module):
                 'pixel_colors_nr': pixel_colors_nr,
                 'pixel_label_nr': pixel_label_nr,
                 'hit_prob_nr': hit_prob_nr,
+                # 'pixel_colors_c':pixel_colors_c,
             }
         else:
             hit_prob_nr, colors_nr, pixel_colors_nr = nr_out
-            outputs = {'pixel_colors_nr': pixel_colors_nr,
+            outputs = {'pixel_colors_nr': pixel_colors_nr,#"pixel_colors_c":pixel_colors_c,
                        'hit_prob_nr': hit_prob_nr}
 
         # predict query hit prob
@@ -280,12 +285,13 @@ class BaseRenderer(nn.Module):
 
     def render_impl(self, que_imgs_info, ref_imgs_info, is_train):
         # [qn,rn,dn]
-        # que_depth, _ = sample_depth(
-        #     que_imgs_info['depth_range'], que_imgs_info['coords'], self.cfg['depth_sample_num'], False)
-        density_volume = self.coarse_density_decoder(ref_imgs_info['global_volume'])[0]
-        que_depth = sample_depth_from_density_volume(density_volume, que_imgs_info, self.cfg['depth_sample_num'], False)
+        que_depth, _ = sample_depth(
+            que_imgs_info['depth_range'], que_imgs_info['coords'], self.cfg['depth_sample_num'], False)
+        density_volume = self.coarse_density_decoder(ref_imgs_info['global_volume'])
+        ref_imgs_info['density_volume'] = density_volume
+        # que_depth = sample_depth_from_density_volume(density_volume[0], que_imgs_info, self.cfg['depth_sample_num'], False)
         depth_mask = (que_depth==0.)
-        que_imgs_info['depth_mask'] =depth_mask
+        que_imgs_info['depth_mask'] =~depth_mask
         outputs = self.render_by_depth(
             que_depth, que_imgs_info, ref_imgs_info, is_train, False)
         if self.cfg['use_hierarchical_sampling']:
@@ -299,10 +305,10 @@ class BaseRenderer(nn.Module):
 
     def render(self, que_imgs_info, ref_imgs_info, is_train):
         ref_img_feats = self.image_encoder(ref_imgs_info['imgs'])
-        seg_logits, pred_sem_seg, mlvl_feats = get_m2f_inference_outputs(self.m2f,ref_imgs_info['imgs_mmseg'])
-        ref_imgs_info['seg_logits'] = seg_logits
-        ref_imgs_info['pred_sem_seg'] = pred_sem_seg
-        ref_imgs_info['mlvl_feats'] = mlvl_feats
+        # seg_logits, pred_sem_seg, mlvl_feats = get_m2f_inference_outputs(self.m2f,ref_imgs_info['imgs_mmseg'])
+        # ref_imgs_info['seg_logits'] = seg_logits
+        # ref_imgs_info['pred_sem_seg'] = pred_sem_seg
+        # ref_imgs_info['mlvl_feats'] = mlvl_feats
         volumes, _ = self.build_ms_voxel(ref_imgs_info)
         global_volume = einops.einops.rearrange(volumes[0],'b c w h d -> 1 (b c) w h d')
         ref_imgs_info['global_volume'] = global_volume
@@ -442,7 +448,7 @@ class Renderer(BaseRenderer):
             # volume = alpha.view(
             #     1, n_x_voxels, n_y_voxels, n_z_voxels) * volume_mean
             global_volume[:, valid[0]==0] = .0
-            volumes.append(self.necks_3d[ind](global_volume[None]))
+            volumes.append(self.necks_3d(global_volume[None]))
             valids.append(valid)
         y =[]
         for i in zip(*volumes):
@@ -514,6 +520,7 @@ class Renderer(BaseRenderer):
         return outputs
         
     def forward(self, data):
+        self.step = data['step']
         ref_imgs_info = data['ref_imgs_info'].copy()
         que_imgs_info = data['que_imgs_info'].copy()
         is_train = 'eval' not in data

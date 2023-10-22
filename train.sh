@@ -1,1 +1,1 @@
-CUDA_VISIBLE_DEVICES=3 python run_training.py --cfg configs/cra/train_cra_cv_ibr_scannet.yaml
+CUDA_VISIBLE_DEVICES=3 python run_training.py --cfg configs/cra/test.yaml

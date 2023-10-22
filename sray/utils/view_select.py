@@ -2,7 +2,36 @@ import numpy as np
 
 from sray.dataset.database import BaseDatabase
 # from utils.base_utils import pose_inverse, project_points
+from sray.utils.draw_utils import draw_aabb, draw_cam
 
+def find_closest_and_remove(Xs, Ys, min_distance=0.1):
+    Xs = np.array(Xs)
+    Ys = np.array(Ys)
+
+    # 计算 Xs 中每个点与 Ys 中所有点的距离矩阵
+    distances = np.linalg.norm(Xs[:, np.newaxis] - Ys, axis=-1)
+    
+    # 根据距离和阈值创建mask
+    mask = distances < min_distance
+    
+    # 将满足条件的距离赋值为1e9
+    distances[mask] = 1e9
+
+    # 找到最小距离的位置
+    # print(distances.astype(int))
+    min_indices = np.unravel_index(np.argmin(distances), distances.shape)
+    # print(min_distance)
+    # print(min_indices)
+    m0 = np.greater(mask.sum(0),0)
+    m0[min_indices[1]] = True
+
+    # 找到最近的点
+    closest_points = Ys[min_indices[1]]
+    
+    # 删除点 
+    # Ys = np.delete(Ys, min_indices, axis=0)
+    Ys = Ys[~m0]
+    return closest_points, Ys
 
 def compute_nearest_camera_indices(database, que_ids, ref_ids=None):
     if ref_ids is None: ref_ids = que_ids
@@ -12,6 +41,21 @@ def compute_nearest_camera_indices(database, que_ids, ref_ids=None):
     que_cam_pts = np.asarray([-pose[:, :3].T @ pose[:, 3] for pose in que_poses])
 
     dists = np.linalg.norm(ref_cam_pts[None, :, :] - que_cam_pts[:, None, :], 2, 2)
+    # import pandas as pd
+    # import plotly.express  as px
+    # data_df = pd.DataFrame(dists.reshape((-1,)).tolist(), columns=['Value'])
+    # data_df['Group'] = pd.cut(data_df['Value'], bins=5)
+    # data_df['Group'] = data_df['Group'].astype(str)
+
+    # # 创建柱状图
+    # fig = px.bar(data_df, x='Group',y='Value', title='数据分布的柱状图')
+    # fig.write_html("bar.html")
+    # px.line(dists.reshape((-1,)).tolist()).write_html("line.html")
+    fig = draw_aabb()
+    fig = draw_cam(fig,ref_cam_pts)
+    fig.write_html("scene.html")
+
+    
     dists_idx = np.argsort(dists, 1)
     return dists_idx
 

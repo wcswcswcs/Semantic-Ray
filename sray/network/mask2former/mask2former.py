@@ -12,6 +12,10 @@ def get_m2f(cfg, device='cuda:0'):
 
 def get_m2f_inference_outputs(model,imgs):
     intermediate_features = []
+    def check_and_replace_nan(x):
+        replacement_value = 0.0
+        x = torch.where(torch.isnan(x), replacement_value, x)
+        return x
     def forward_hook(module, input, output):
         # 收集指定模块的输出张量
         intermediate_features.append(output[1])
@@ -24,15 +28,18 @@ def get_m2f_inference_outputs(model,imgs):
     seg_logits = []
     pred_sem_seg = []
     for res in results:
-        seg_logits.append(res.seg_logits.data)
-        pred_sem_seg.append(res.pred_sem_seg.data)
+        seg_logits.append(check_and_replace_nan(res.seg_logits.data))
+        pred_sem_seg.append(check_and_replace_nan(res.pred_sem_seg.data))
     seg_logits = torch.stack(seg_logits,0)
     pred_sem_seg = torch.stack(pred_sem_seg,0)
 
     k = model.decode_head.query_embed.weight.requires_grad_(False) + \
         model.decode_head.query_feat.weight.requires_grad_(False)
     v = k
-    s = [(15, 20), (30, 40),(60, 80)]
+    k = check_and_replace_nan(k)
+    v = check_and_replace_nan(v)
+    # s = [(15, 20), (30, 40),(60, 80)]
+    s = [(60, 80), (60, 80),(60, 80)]
     mlvl_feats = []
     for ind,i in enumerate(intermediate_features[0]):
         c,h,w = i.shape[-3:]
@@ -42,6 +49,8 @@ def get_m2f_inference_outputs(model,imgs):
         y = torch.einsum('b L n, n c -> b L c',att,v)
         y = einops.einops.rearrange(y,'b (h w) c -> b c h w ',h=h,w=w)
         y = torch.nn.functional.interpolate(y,size=s[ind],mode='bilinear')
+
+        # y = torch.nn.functional.interpolate(i,size=s[ind],mode='bilinear')
         mlvl_feats.append(y)
     
     

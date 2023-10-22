@@ -117,6 +117,11 @@ def build_imgs_info(database, ref_ids, pad_interval=-1, is_aligned=True, align_d
                     if depth is None: ref_depths[i] = np.zeros([h, w], dtype=np.float32)
             ref_depths = np.asarray(ref_depths, dtype=np.float32)[:, None, :, :]
         else: ref_depths = None
+    m2f = [database.get_m2f_out(ref_id) for ref_id in ref_ids]
+    seg_logits, pred_sem_seg, mlvl_feats = zip(*m2f)
+    seg_logits = torch.stack(seg_logits,0)
+    pred_sem_seg  = torch.stack(pred_sem_seg,0)
+    mlvl_feats = torch.stack(mlvl_feats,1)
 
     ref_poses = np.asarray([database.get_pose(ref_id) for ref_id in ref_ids], dtype=np.float32)
     ref_Ks = np.asarray([database.get_K(ref_id) for ref_id in ref_ids], dtype=np.float32)
@@ -126,6 +131,9 @@ def build_imgs_info(database, ref_ids, pad_interval=-1, is_aligned=True, align_d
         ref_depth_range[:,1]=np.max(ref_depth_range[:,1])
     ref_imgs_info = {
         'imgs_mmseg':ref_imgs_mmseg,
+        'seg_logits':seg_logits,
+        'pred_sem_seg':pred_sem_seg,
+        'mlvl_feats':mlvl_feats,
         'imgs': ref_imgs, 
         'poses': ref_poses, 
         'Ks': ref_Ks, 

@@ -8,7 +8,7 @@ import pandas as pd
 from PIL import Image
 from skimage.io import imread
 from natsort import natsorted
-
+import torch
 from sray.utils.base_utils import downsample_gaussian_blur, pose_inverse
 from sray.dataset.semantic_utils import PointSegClassMapping
 
@@ -170,6 +170,14 @@ class ScannetDatabase(BaseDatabase):
         label = label.astype(np.int32)
         label = self.scan2nyu[label]
         return self.label_mapping(label)
+    
+    def get_m2f_out(self,img_id):
+        data = torch.load(os.path.join(self.root_dir,'m2f',f'm2f_{img_id}.pt'))
+        seg_logits = data['seg_logits'] 
+        pred_sem_seg = data['pred_sem_seg']
+        mlvl_feats = data['mlvl_feats']
+        return seg_logits, pred_sem_seg, mlvl_feats
+
 
 
 class ReplicaDatabase(BaseDatabase):

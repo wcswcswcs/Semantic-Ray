@@ -120,7 +120,8 @@ class CRANet_CV_IBR(IBRNetWithNeuRay):
         num_views = rgb_feat.shape[2]
         direction_feat = self.ray_dir_fc(ray_diff)
         rgb_in = rgb_feat[..., :3]
-        rgb_feat = rgb_feat + direction_feat
+        # rgb_feat = rgb_feat + direction_feat
+        rgb_feat =torch.cat([rgb_in,self.m2f_feat_prj(m2f_feats)],-1) + direction_feat
         if self.anti_alias_pooling:
             _, dot_prod = torch.split(ray_diff, [3, 1], dim=-1)
             exp_dot_prod = torch.exp(torch.abs(self.s) * (dot_prod - 1))
@@ -157,7 +158,9 @@ class CRANet_CV_IBR(IBRNetWithNeuRay):
         mean, var = fused_mean_variance(x, weight)
         globalfeat = torch.cat([mean.squeeze(2), var.squeeze(
             2), weight.mean(dim=2)], dim=-1)  # [n_rays, n_samples, 32*2+1]
-        globalfeat = self.geometry_fc(globalfeat) + self.global_volume_fc(global_volume_feats)  # [n_rays, n_samples, 16]
+        # globalfeat = self.geometry_fc(globalfeat)
+        # globalfeat = self.geometry_fc(globalfeat) + self.global_volume_fc(global_volume_feats)  # [n_rays, n_samples, 16]
+        globalfeat = self.global_volume_fc(global_volume_feats)
         num_valid_obs = torch.sum(mask, dim=2)
         globalfeat = globalfeat + self.pos_encoding
         globalfeat, _ = self.ray_attention(globalfeat, globalfeat, globalfeat,
@@ -184,8 +187,8 @@ class CRANet_CV_IBR(IBRNetWithNeuRay):
         #     sem_latent
         # ], dim=-1)
 
-        # sem_feat = self.sem_fc(sem_feat)
-        sem_feat = self.m2f_feat_prj(m2f_feats) + sem_latent #rgb_feat_dat
+        sem_feat = sem_latent
+        # sem_feat = self.m2f_feat_prj(m2f_feats) #+ sem_latent #rgb_feat_dat
         # b, n, v, f = sem_feat.shape
         # sem_feat = sem_feat.permute(0, 2, 1, 3).reshape(-1, n, f)
         # ref_sem_feats_ds = self.ds_ref_img_f(ref_sem_feats_dat)
@@ -252,14 +255,16 @@ class CRANet_CV_IBR(IBRNetWithNeuRay):
         x = self.sem_w_fc1(sem_feat)
         
         blending_weights_sem1 = F.softmax(x, dim=2)  # color blending
-        blending_weights_sem2 = self.sem_w_fc2(sem_feat).softmax(2)
+        # blending_weights_sem2 = self.sem_w_fc2(sem_feat).softmax(2)
         sem_feat = torch.sum(sem_feat * blending_weights_sem1, dim=2)
-        seg_logits = torch.sum(seg_logits * blending_weights_sem2, dim=2)
-        sem_feat = sem_feat + self.pos_encoding_2
-        sem_feat, _ = self.ray_attention_2(sem_feat, sem_feat, sem_feat,
-                                           mask=(num_valid_obs > 1).float())  # [n_rays, n_samples, 16]
+        # seg_logits = torch.sum(seg_logits * blending_weights_sem2, dim=2)
+        # seg_logits = torch.sum(seg_logits * blending_weights_sem1, dim=2)
+        # sem_feat = sem_feat + self.pos_encoding_2
+        # sem_feat, _ = self.ray_attention_2(sem_feat, sem_feat, sem_feat,
+        #                                    mask=(num_valid_obs > 1).float())  # [n_rays, n_samples, 16]
         
-        sem_feat = self.sem_out(sem_feat) + seg_logits
+        # sem_feat = seg_logits #+ self.sem_out(sem_feat)  
+        sem_feat =  self.sem_out(sem_feat)  
         # sem_feat = sem_feat.masked_fill(num_valid_obs < 1, 0.)
 
         

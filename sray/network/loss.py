@@ -32,6 +32,7 @@ class RenderLoss(Loss):
     def __call__(self, data_pr, data_gt, step, **kwargs):
         rgb_gt = data_pr['pixel_colors_gt']  # 1,rn,3
         rgb_nr = data_pr['pixel_colors_nr']  # 1,rn,3
+        # rgb_nr_c = data_pr['pixel_colors_c']
 
         def compute_loss(rgb_pr, rgb_gt):
             loss = torch.sum((rgb_pr-rgb_gt)**2, -1)        # b,n
@@ -44,6 +45,7 @@ class RenderLoss(Loss):
             return loss * self.cfg['render_loss_scale']
 
         results = {'loss_rgb_nr': compute_loss(rgb_nr, rgb_gt)}
+        # results['loss_rgb_nr_c'] = compute_loss(rgb_nr_c, rgb_gt)
         if self.cfg['use_dr_loss']:
             rgb_dr = data_pr['pixel_colors_dr']  # 1,rn,3
             results['loss_rgb_dr'] = compute_loss(rgb_dr, rgb_gt)
