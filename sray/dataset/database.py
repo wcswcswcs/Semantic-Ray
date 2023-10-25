@@ -11,7 +11,7 @@ from natsort import natsorted
 import torch
 from sray.utils.base_utils import downsample_gaussian_blur, pose_inverse
 from sray.dataset.semantic_utils import PointSegClassMapping
-
+from torchvision import transforms as T
 
 class BaseDatabase(abc.ABC):
     def __init__(self, database_name):
@@ -95,6 +95,23 @@ class ScannetDatabase(BaseDatabase):
                            11, 12, 14, 16, 24, 28, 33, 34, 36, 39],
             max_cat_id=40
         )
+        self.transform = T.Compose(
+            [
+                T.ToTensor(),
+                T.Normalize(mean=[0.485, 0.456, 0.406], std=[0.229, 0.224, 0.225]),
+            ]
+        )
+
+    def get_norm_image(self, img_id):
+        if img_id in self.img_id2imgs:
+            return self.img_id2imgs[img_id]
+        img = imread(os.path.join(
+            self.root_dir, 'color', f'{int(img_id)}.jpg'))
+        if self.w != 1296:
+            img = cv2.resize(downsample_gaussian_blur(
+                img, self.ratio), (self.w, self.h), interpolation=cv2.INTER_LINEAR)
+        img = self.transform(img).permute(1,2,0)
+        return img
 
     def get_image(self, img_id):
         if img_id in self.img_id2imgs:
@@ -104,13 +121,14 @@ class ScannetDatabase(BaseDatabase):
         if self.w != 1296:
             img = cv2.resize(downsample_gaussian_blur(
                 img, self.ratio), (self.w, self.h), interpolation=cv2.INTER_LINEAR)
+        # img = self.transform(img).permute(1,2,0)
 
         return img
     def get_image_for_mmseg(self, img_id):
 
         img_path = os.path.join(
             self.root_dir, 'color', f'{int(img_id)}.jpg')
-        img = cv2.imread(img_path)
+        img = cv2.imread(img_path)[...,::-1]
         if self.w != 1296:
             img = cv2.resize(downsample_gaussian_blur(
                 img, self.ratio), (self.w, self.h), interpolation=cv2.INTER_LINEAR)
@@ -172,11 +190,11 @@ class ScannetDatabase(BaseDatabase):
         return self.label_mapping(label)
     
     def get_m2f_out(self,img_id):
-        data = torch.load(os.path.join(self.root_dir,'m2f',f'm2f_{img_id}.pt'))
+        data = torch.load(os.path.join(self.root_dir,'m2f',f'm2f_{img_id}.pt'),map_location='cpu')
         seg_logits = data['seg_logits'] 
-        pred_sem_seg = data['pred_sem_seg']
-        mlvl_feats = data['mlvl_feats']
-        return seg_logits, pred_sem_seg, mlvl_feats
+        # pred_sem_seg = data['pred_sem_seg']
+        # mlvl_feats = data['mlvl_feats']
+        return seg_logits#, pred_sem_seg, mlvl_feats
 
 
 

@@ -304,7 +304,7 @@ class RendererDataset(Dataset):
             if database.database_name.startswith('gso') and self.cfg['use_depth']:
                 depth_aug = self.add_depth_noise(ref_imgs_info['depth'], ref_imgs_info['masks'], ref_imgs_info['depth_range'])
                 ref_imgs_info['true_depth'] = ref_imgs_info['depth']
-                ref_imgs_info['depth'] = depth_aug
+                ref_imgs_info[] = depth_aug
 
             if database.database_name.startswith('real_estate') \
                 or database.database_name.startswith('real_iconic') \

@@ -71,8 +71,8 @@ class RendererDataset(Dataset):
         'val_database_name': 'scannet/scene0376_02/black_320',
         'val_database_split_type': 'val',
 
-        'min_wn': 8,
-        'max_wn': 9,
+        'min_wn': 12,
+        'max_wn': 13,
         'ref_pad_interval': 16,
         'train_ray_num': 512,
         'foreground_ratio': 0.5,
@@ -291,7 +291,7 @@ class RendererDataset(Dataset):
             ref_idx = compute_nearest_camera_indices(database, ref_ids)[:,1:4] # used in cost volume construction
             is_aligned = not database.database_name.startswith('space')
             ref_imgs_info = build_imgs_info(database, ref_ids, -1, is_aligned)
-        que_imgs_info = build_imgs_info(database, [que_id], has_depth=self.is_train)
+        que_imgs_info = build_imgs_info(database, [que_id], has_depth=True)
 
         if self.is_train:
             # data augmentation

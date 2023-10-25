@@ -98,7 +98,7 @@ class MultiHeadAttention(nn.Module):
         q = self.fc(q)
         q += residual
 
-        q = self.layer_norm(q)
+        q =  torch.nan_to_num(self.layer_norm(q))
 
         return q, attn
 

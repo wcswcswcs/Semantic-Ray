@@ -79,8 +79,8 @@ class SemanticAggregationNet(nn.Module):
 
         dir_diff = get_dir_diff(prj_dir, que_dir)
         valid_mask = prj_dict['mask']
-        depth_mask = prj_dict['depth_mask'][None,...,None].float()
-        valid_mask = valid_mask * depth_mask
+        # depth_mask = prj_dict['depth_mask'][None,...,None].float()
+        # valid_mask = valid_mask * depth_mask
         valid_mask = valid_mask.float()  # rfn,qn,rn,dn
         valid_mask = valid_mask.reshape(
             rfn, qn * rn, dn, -1).permute(1, 2, 0, 3)

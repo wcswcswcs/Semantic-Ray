@@ -3,7 +3,7 @@
 from mmcv.runner import BaseModule
 from mmseg.models import SEGMENTORS, builder
 import warnings
-
+import torch
 
 
 @SEGMENTORS.register_module()
@@ -49,6 +49,7 @@ class TPVFormer(BaseModule):
         #     True, True, rotate=1, offset=False, ratio=0.5, mode=1, prob=0.7)
         # self.use_grid_mask = use_grid_mask
         self.fp16_enabled = False
+        # self.feats_proj = torch.nn.Conv2d(21,64,kernel_size=1)
 
     # @auto_fp16(apply_to=('img'))
     def extract_img_feat(self, img, use_grid_mask=None):
@@ -82,11 +83,16 @@ class TPVFormer(BaseModule):
                 points=None,
                 img_metas=None,
                 img=None,
+                img_feat2 = None,
                 use_grid_mask=None,
         ):
         """Forward training function.
         """
         img_feats = self.extract_img_feat(img=img.to('cuda'), use_grid_mask=use_grid_mask)
+        # img_feats = [torch.rand((1,8,64,60,80)).to(img_feats[0].device)]+img_feats
+        if img_feat2 is not None:
+            img_feat2 = self.feats_proj(img_feat2)[None]
+            img_feats = [img_feat2]+img_feats
         outs = self.tpv_head(img_feats, img_metas)
         # outs = self.tpv_aggregator(outs, points)
         return outs

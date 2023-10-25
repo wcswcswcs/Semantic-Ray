@@ -3,13 +3,40 @@ import numpy as np
 from sray.dataset.database import BaseDatabase
 # from utils.base_utils import pose_inverse, project_points
 from sray.utils.draw_utils import draw_aabb, draw_cam
+from sklearn.neighbors import BallTree
 
-def find_closest_and_remove(Xs, Ys, min_distance=0.1):
+def farthest_point_sampling(points, k):
+    """
+    使用Ball-Tree进行最远点采样
+    :param points: 输入点云或数据集，每一行代表一个点的坐标
+    :param k: 选择的最远点的数量
+    :return: 选择的最远点的索引
+    """
+    n = points.shape[0]
+    selected_indices = []
+
+    # 随机选择一个起始点
+    start_idx = np.random.randint(0, n)
+    selected_indices.append(start_idx)
+
+    # 构建Ball-Tree
+    ball_tree = BallTree(points)
+
+    # 选择剩余的点
+    for _ in range(k - 1):
+        # 查询最远点
+        distances, indices = ball_tree.query(points[selected_indices[-1]].reshape(1, -1), k=2)
+        farthest_idx = indices[0, 1]  # 第二近的点即为最远点
+        selected_indices.append(farthest_idx)
+
+    return selected_indices
+
+def find_closest_and_remove(Xs, Ys, min_distance=0.05):
     Xs = np.array(Xs)
     Ys = np.array(Ys)
 
     # 计算 Xs 中每个点与 Ys 中所有点的距离矩阵
-    distances = np.linalg.norm(Xs[:, np.newaxis] - Ys, axis=-1)
+    distances = np.linalg.norm(Xs[:, np.newaxis] - Ys[np.newaxis], axis=-1)
     
     # 根据距离和阈值创建mask
     mask = distances < min_distance
@@ -30,8 +57,8 @@ def find_closest_and_remove(Xs, Ys, min_distance=0.1):
     
     # 删除点 
     # Ys = np.delete(Ys, min_indices, axis=0)
-    Ys = Ys[~m0]
-    return closest_points, Ys
+    # Ys = Ys[~m0]
+    return closest_points, min_indices[1], ~m0
 
 def compute_nearest_camera_indices(database, que_ids, ref_ids=None):
     if ref_ids is None: ref_ids = que_ids
@@ -41,6 +68,8 @@ def compute_nearest_camera_indices(database, que_ids, ref_ids=None):
     que_cam_pts = np.asarray([-pose[:, :3].T @ pose[:, 3] for pose in que_poses])
 
     dists = np.linalg.norm(ref_cam_pts[None, :, :] - que_cam_pts[:, None, :], 2, 2)
+
+    
     # import pandas as pd
     # import plotly.express  as px
     # data_df = pd.DataFrame(dists.reshape((-1,)).tolist(), columns=['Value'])
@@ -51,9 +80,9 @@ def compute_nearest_camera_indices(database, que_ids, ref_ids=None):
     # fig = px.bar(data_df, x='Group',y='Value', title='数据分布的柱状图')
     # fig.write_html("bar.html")
     # px.line(dists.reshape((-1,)).tolist()).write_html("line.html")
-    fig = draw_aabb()
-    fig = draw_cam(fig,ref_cam_pts)
-    fig.write_html("scene.html")
+    # fig = draw_aabb()
+    # fig = draw_cam(fig,ref_cam_pts)
+    # fig.write_html("scene.html")
 
     
     dists_idx = np.argsort(dists, 1)

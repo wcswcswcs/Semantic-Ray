@@ -1,7 +1,7 @@
 import torch
 import torch.nn as nn
 import numpy as np
-from sray.network.aggregate_net import name2agg_net
+from sray.network.aggregate_net_v2 import name2agg_net
 from sray.network.dist_decoder import name2dist_decoder
 from sray.network.init_net import name2init_net
 from sray.network.ops import ResUNetLight,upconv
@@ -10,7 +10,19 @@ from sray.network.render_ops import *
 from sray.network.dat.dat import DAT
 from sray.network.mask2former.mask2former import *
 from sray.network.nerfdet.utils import *
-from sray.network.nerfdet.neck import FastIndoorImVoxelNeck
+# from sray.network.nerfdet.neck import FastIndoorImVoxelNeck
+from sray.network.geo_reasoner import CasMVSNet
+from mmengine.config import Config
+from mmseg.models import build_segmentor
+from sray.network.tpvformer10 import *
+from sray.utils.utils import get_rays_pts
+from sray.utils.rendering import *
+
+
+def model_builder(model_config):
+    model = build_segmentor(model_config)
+    model.init_weights()
+    return model
 class BaseRenderer(nn.Module):
     base_cfg = {
         'vis_encoder_type': 'default',
@@ -25,7 +37,7 @@ class BaseRenderer(nn.Module):
         'use_hierarchical_sampling': False,
         'fine_agg_net_cfg': {},
         'fine_dist_decoder_cfg': {},
-        'fine_depth_sample_num': 64,
+        'fine_depth_sample_num': 32,
         'fine_depth_use_all': False,
 
         'ray_batch_num': 2048,
@@ -33,7 +45,7 @@ class BaseRenderer(nn.Module):
         'alpha_value_ground_state': -15,
         'use_nr_color_for_dr': False,
         'use_self_hit_prob': False,
-        'use_ray_mask': True,
+        'use_ray_mask': False,#True,
         'ray_mask_view_num': 2,
         'ray_mask_point_num': 8,
 
@@ -41,39 +53,21 @@ class BaseRenderer(nn.Module):
         'render_label': False,
         'num_classes': 20,
         'use_ref_sem_loss': False,
+
+        # 'nb_views': 8 ,
+        'tpv_h' : 160,
+        'tpv_w' : 160,
+        'tpv_z' : 64,
+        
     }
 
     def __init__(self, cfg):
         super().__init__()
         self.cfg = {**self.base_cfg}
         self.cfg.update(cfg)
-        self.vis_encoder = name2vis_encoder[self.cfg['vis_encoder_type']](
-            self.cfg['vis_encoder_cfg'])
-        self.dist_decoder = name2dist_decoder[self.cfg['dist_decoder_type']](
-            self.cfg['dist_decoder_cfg'])
-        self.image_encoder = ResUNetLight(3, [1, 2, 6, 4], 32, inplanes=16)
-        # self.m2f = get_m2f(self.cfg['M2F'])
-        self.use_dat = True if 'DAT' in cfg.keys() else False
-        if self.use_dat:
-            self.dat = DAT(**cfg['DAT'])
-        self.sem_head_2d =nn.Sequential(
-            upconv(32,64,3,4),
-            nn.SiLU(),
-            nn.Conv2d(64,cfg['num_classes']+1,stride=1,kernel_size=1)
-        ) 
-        self.coarse_density_decoder = nn.Sequential(
-            nn.Conv3d(256*3,256,kernel_size=1),
-            nn.BatchNorm3d(256),
-            nn.ReLU(inplace=True),
-            nn.Conv3d(256,1,kernel_size=1),
-        )
-
-        self.mean_mapping = nn.ModuleList([nn.Conv3d(256,128 , kernel_size=1) for _ in range(3)])
-        self.cov_mapping = nn.ModuleList([nn.Conv3d(256,128 , kernel_size=1) for _ in range(3)])
-        self.mapping = nn.ModuleList([nn.Conv3d(256,256 , kernel_size=1) for _ in range(3)])
-        self.necks_3d = FastIndoorImVoxelNeck(
-                                (256+3)*2,[1, 1, 1],256
-                            )
+        self.cfg['nb_views'] = self.cfg['train_dataset_cfg']['num_geo_src_views']
+        
+        self.geo_reasoner = CasMVSNet(use_depth=False).cuda()
         
         self.agg_net = name2agg_net[self.cfg['agg_net_type']](
             self.cfg['agg_net_cfg'])
@@ -82,6 +76,8 @@ class BaseRenderer(nn.Module):
                 self.cfg['fine_dist_decoder_cfg'])
             self.fine_agg_net = name2agg_net[self.cfg['agg_net_type']](
                 self.cfg['fine_agg_net_cfg'])
+        tpv_cfg = Config.fromfile('sray/network/tpvformer10/tpv_config.py')
+        self.tpvformer = model_builder(tpv_cfg.model).cuda()
 
 
     def predict_proj_ray_prob(self, prj_dict, ref_imgs_info, que_dists, is_fine):
@@ -135,9 +131,12 @@ class BaseRenderer(nn.Module):
         if img_feats_dat is not None:
             prj_img_feats_dat = interpolate_feature_map(img_feats_dat, pts, mask, h, w,)
             prj_dict['img_feats_dat'] = prj_img_feats_dat.reshape(rfn, qn, rn, dn, -1)
-        for key in ['seg_logits', 'pred_sem_seg']:
+        for key in ['seg_logits', 'pred_sem_seg','labels']:
             if key in ref_imgs_info:
                 prj_dict[key] = interpolate_feature_map(ref_imgs_info[key].float(), pts, mask, h, w,)
+            if key == 'seg_logits':
+                seg_logits_ds = F.interpolate(ref_imgs_info[key],scale_factor=0.25)
+                prj_dict['seg_logits_ds'] = interpolate_feature_map(seg_logits_ds, pts, mask, h, w,)
         for key in ['global_volume','mlvl_feats']:
             if key in ref_imgs_info:
                 prj_dict[key] = ref_imgs_info[key]
@@ -217,7 +216,7 @@ class BaseRenderer(nn.Module):
 
         
         prj_dict = project_points_dict(ref_imgs_info, que_pts)
-        prj_dict['depth_mask'] = que_imgs_info['depth_mask']
+        # prj_dict['depth_mask'] = que_imgs_info['depth_mask']
         prj_dict = self.predict_proj_ray_prob(
             prj_dict, ref_imgs_info, que_dists, is_fine)
         prj_dict = self.get_img_feats(ref_imgs_info, prj_dict)
@@ -247,6 +246,10 @@ class BaseRenderer(nn.Module):
         if 'imgs' in que_imgs_info:
             outputs['pixel_colors_gt'] = interpolate_feats(
                 que_imgs_info['imgs'], que_imgs_info['coords'], align_corners=True)
+        if 'depth' in que_imgs_info:
+            outputs['pixel_depth_gt'] = interpolate_feats(
+                que_imgs_info['depth'], que_imgs_info['coords'], align_corners=True)
+
 
         if 'labels' in que_imgs_info:
             outputs['pixel_label_gt'] = interpolate_feats(
@@ -283,7 +286,7 @@ class BaseRenderer(nn.Module):
             que_depth, que_imgs_info, ref_imgs_info, is_train, True)
         return outputs
 
-    def render_impl(self, que_imgs_info, ref_imgs_info, is_train):
+    def render_impl_bk(self, que_imgs_info, ref_imgs_info, is_train):
         # [qn,rn,dn]
         que_depth, _ = sample_depth(
             que_imgs_info['depth_range'], que_imgs_info['coords'], self.cfg['depth_sample_num'], False)
@@ -302,34 +305,129 @@ class BaseRenderer(nn.Module):
             for k, v in fine_outputs.items():
                 outputs[k + "_fine"] = v
         return outputs
+    
+    def render_impl(self, que_imgs_info, ref_imgs_info, is_train):
+        # [qn,rn,dn]
+        H,W = ref_imgs_info['imgs'][0].shape[-2:]
+        (
+            pts_depth,
+            rays_pts,
+            rays_pts_ndc,
+            rays_dir,
+            rays_gt_rgb,
+            rays_gt_depth,
+            rays_pixs,
+        ) = get_rays_pts(
+            H,
+            W,
+            ref_imgs_info["c2ws"],
+            ref_imgs_info["w2cs"],
+            ref_imgs_info["intrinsics"],
+            ref_imgs_info["near_fars"],
+            ref_imgs_info['depth_values'],
+            self.cfg['depth_sample_num'],
+            self.cfg['fine_depth_sample_num'],
+            nb_views=self.cfg['nb_views'],
+            train=is_train,
+            train_batch_size=self.cfg['train_dataset_cfg']['train_ray_num'],
+            target_img=que_imgs_info['imgs'],
+            target_depth=None,
+            que_imgs_info=que_imgs_info
+        )
+
+        pts_feat = interpolate_pts_feats(
+            ref_imgs_info['imgs'][:self.cfg['nb_views']], 
+            ref_imgs_info['feats_fpn'], 
+            ref_imgs_info['feats_vol'], 
+            rays_pts_ndc)
+        occ_masks = get_occ_masks( ref_imgs_info['depth_map_norm'], rays_pts_ndc)
+        
+        rays_dir_unit = rays_dir / torch.norm(rays_dir, dim=-1, keepdim=True)
+        angles = get_angle_wrt_src_cams(ref_imgs_info['c2ws'], rays_pts, rays_dir_unit)
+        embedded_angles = get_embedder()(angles)
+        rays_pts = rays_pts.unsqueeze(0)
+        prj_dict = project_points_dict_v2(ref_imgs_info, rays_pts,self.cfg['nb_views'])
+        prj_dict['rays_pts'] = rays_pts
+        prj_dict['geonerf_feats'] = pts_feat.permute(0,2,1,3)
+        prj_dict['occ_masks'] = occ_masks.permute(0,2,1,3)
+        prj_dict['embedded_angles'] = embedded_angles.permute(0,2,1,3)
+        prj_dict['viewdirs'] = rays_dir_unit
+        agg_net_out = self.agg_net(prj_dict,rays_dir_unit)
+        rgb = agg_net_out['colors']
+        sigma = agg_net_out['density']
+        semantic = agg_net_out['semantic']
+        sem_out = agg_net_out['sem_out']
+        rgb_sigma = torch.cat([rgb,sigma],-1)
+        rendered_rgb, render_depth,weights = volume_rendering(rgb_sigma, pts_depth,semantic)
+        semantic_map =  torch.sum(weights[..., None] * semantic, -2)
+        sem_out = torch.sum(weights[..., None] * sem_out, -2)
+        outputs = {
+            'pixel_colors_nr': rendered_rgb[None],
+            'render_depth':render_depth[None,...,None],
+            }
+        outputs['pixel_label_gt'] = interpolate_feats(
+                    que_imgs_info['labels'].float(),
+                    que_imgs_info['coords'],
+                    align_corners=True,
+                    inter_mode='nearest'
+                )
+        
+        outputs['pixel_depth_gt'] = interpolate_feats(
+            que_imgs_info['depth'], que_imgs_info['coords'], align_corners=True)
+        
+        outputs['pixel_colors_gt'] = interpolate_feats(
+                        que_imgs_info['imgs'], que_imgs_info['coords'], align_corners=True)
+        
+        outputs['pixel_label_nr'] = semantic_map[None]
+        outputs['sem_out'] = sem_out[None]
+
+        
+        return outputs
 
     def render(self, que_imgs_info, ref_imgs_info, is_train):
-        ref_img_feats = self.image_encoder(ref_imgs_info['imgs'])
-        # seg_logits, pred_sem_seg, mlvl_feats = get_m2f_inference_outputs(self.m2f,ref_imgs_info['imgs_mmseg'])
-        # ref_imgs_info['seg_logits'] = seg_logits
-        # ref_imgs_info['pred_sem_seg'] = pred_sem_seg
-        # ref_imgs_info['mlvl_feats'] = mlvl_feats
-        volumes, _ = self.build_ms_voxel(ref_imgs_info)
-        global_volume = einops.einops.rearrange(volumes[0],'b c w h d -> 1 (b c) w h d')
-        ref_imgs_info['global_volume'] = global_volume
+        nb_views = self.cfg['nb_views']
+        # nb_views = 8
+        feats_vol, feats_fpn, depth_map, depth_values = self.geo_reasoner(
+            imgs=ref_imgs_info["norm_imgs"][None, :nb_views],
+            affine_mats=ref_imgs_info["affine_mats"][None, :nb_views],
+            affine_mats_inv=ref_imgs_info["affine_mats_inv"][None, :nb_views],
+            near_far=ref_imgs_info["near_fars"][None, :nb_views],
+            closest_idxs=ref_imgs_info["closest_idxs"][None, :nb_views],
+            gt_depths=ref_imgs_info["depths_aug"][None, :nb_views],
+        )
+        ## Normalizing depth maps in NDC coordinate
+        depth_map_norm = {}
+        for l in range(3):
+            depth_map_norm[f"level_{l}"] = (
+                depth_map[f"level_{l}"].detach() - depth_values[f"level_{l}"][:, :, 0]
+            ) / (
+                depth_values[f"level_{l}"][:, :, -1]
+                - depth_values[f"level_{l}"][:, :, 0]
+            )
+        ref_imgs_info['feats_vol'] = feats_vol
+        ref_imgs_info['feats_fpn'] = feats_fpn 
+        ref_imgs_info['depth_map'] = depth_map 
+        ref_imgs_info['depth_values'] = depth_values
+        ref_imgs_info['depth_map_norm'] = depth_map_norm
+        if self.cfg['use_tpvformer']:
+            tpv_hw,tpv_zh,tpv_wz = self.tpvformer(
+                    img_metas=ref_imgs_info['img_metas'],
+                    img=ref_imgs_info['norm_imgs'][None],
+                    # img_feat2 = ref_imgs_info['seg_logits']
+                    )
+            tpv_h = self.cfg['tpv_h']
+            tpv_w = self.cfg['tpv_w']
+            tpv_z = self.cfg['tpv_z']
+            tpv_hw = tpv_hw.permute(0,2,1).reshape((1,-1,tpv_h,tpv_w))
+            tpv_zh = tpv_zh.permute(0,2,1).reshape((1,-1,tpv_z,tpv_h))
+            tpv_wz = tpv_wz.permute(0,2,1).reshape((1,-1,tpv_w,tpv_z))
+            ref_imgs_info['tpv_hw'] = tpv_hw
+            ref_imgs_info['tpv_zh'] = tpv_zh
+            ref_imgs_info['tpv_wz'] = tpv_wz
+
         if 'aabb' in self.cfg.keys():
-            ref_imgs_info['aabb'] = torch.tensor(self.cfg['aabb']).to(global_volume.device)
-            que_imgs_info['aabb'] = torch.tensor(self.cfg['aabb']).to(global_volume.device)
-
-        if self.use_dat:
-            _,ref_img_feats_dat = self.dat(ref_img_feats)
-        
-        # ref_sem_pred = self.sem_head_2d(ref_img_feats)
-        ref_imgs_info['img_feats'] = ref_img_feats
-        if self.use_dat:
-            ref_imgs_info['img_feats_dat'] = ref_img_feats_dat
-        ref_imgs_info['ray_feats'] = self.vis_encoder(
-            ref_imgs_info['ray_feats'], ref_img_feats)
-
-        # if is_train and self.cfg['use_self_hit_prob']:
-        #     que_img_feats = self.image_encoder(que_imgs_info['imgs'])
-        #     que_imgs_info['ray_feats'] = self.vis_encoder(
-        #         que_imgs_info['ray_feats'], que_img_feats)
+            ref_imgs_info['aabb'] = torch.tensor(self.cfg['aabb']).to(que_imgs_info['Ks'].device)
+            que_imgs_info['aabb'] = torch.tensor(self.cfg['aabb']).to(que_imgs_info['Ks'].device)
 
         ray_batch_num = self.cfg["ray_batch_num"]
         coords = que_imgs_info['coords']
@@ -349,10 +447,10 @@ class BaseRenderer(nn.Module):
 
         for k, v in render_info_all.items():
             render_info_all[k] = torch.cat(v, 1)
-
+        render_info_all['depth_map'] = ref_imgs_info['depth_map']
         # render_info['ref_sem_pred'] = ref_sem_pred
-        if self.use_dat:
-            render_info_all['ref_img_feats_dat'] = ref_img_feats_dat
+        # if self.use_dat:
+        #     render_info_all['ref_img_feats_dat'] = ref_img_feats_dat
 
         return render_info_all
 
@@ -529,12 +627,12 @@ class Renderer(BaseRenderer):
         ) if 'src_imgs_info' in data else None
         render_outputs = self.render_call(
             que_imgs_info, ref_imgs_info, is_train, src_imgs_info)
-        if (self.cfg['use_depth_loss'] and 'true_depth' in ref_imgs_info) or (not is_train):
-            render_outputs.update(
-                self.predict_mean_for_depth_loss(ref_imgs_info))
-        if self.use_dat:
-            y = render_outputs['ref_img_feats_dat']
-        else:
-            y = ref_imgs_info['img_feats']
-        render_outputs['ref_sem_pred'] = self.sem_head_2d(y)
+        # if (self.cfg['use_depth_loss'] and 'true_depth' in ref_imgs_info) or (not is_train):
+        #     render_outputs.update(
+        #         self.predict_mean_for_depth_loss(ref_imgs_info))
+        # if self.use_dat:
+        #     y = render_outputs['ref_img_feats_dat']
+        # else:
+        #     y = ref_imgs_info['img_feats']
+        # render_outputs['ref_sem_pred'] = self.sem_head_2d(y)
         return render_outputs

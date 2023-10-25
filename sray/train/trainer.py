@@ -56,7 +56,8 @@ class Trainer:
         elif isinstance(self.cfg['val_set_list'], str):
             val_scenes = np.loadtxt(self.cfg['val_set_list'], dtype=str).tolist()
             for name in val_scenes:
-                val_cfg = {'val_database_name': name}
+                val_cfg = {'val_database_name': name,
+                           'num_geo_src_views':self.cfg['train_dataset_cfg']['num_geo_src_views']}
                 val_set = RendererDataset(val_cfg, False)
                 val_set = DataLoader(
                     val_set, 1, False, num_workers=self.cfg['worker_num'], collate_fn=dummy_collate_fn)
@@ -162,12 +163,14 @@ class Trainer:
             for k, v in log_info.items():
                 if k.startswith('loss'):
                     loss = loss+torch.mean(v)
+                    # print(f"{k}:{torch.mean(v)}")
+            if not loss.isnan():
+                loss.backward()
+                if 'max_grad_norm' in self.cfg:
+                    norm = clip_grad_norm_(self.network.parameters(), self.cfg['max_grad_norm'])
+                    log_info['grad_norm'] = norm
+                self.optimizer.step()
 
-            loss.backward()
-            if 'max_grad_norm' in self.cfg:
-                norm = clip_grad_norm_(self.network.parameters(), self.cfg['max_grad_norm'])
-                log_info['grad_norm'] = norm
-            self.optimizer.step()
             if ((step+1) % self.cfg['train_log_step']) == 0:
                 self._log_data(log_info, step+1, 'train')
 

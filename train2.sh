@@ -1,0 +1,1 @@
+CUDA_VISIBLE_DEVICES=2 python run_training.py --cfg configs/cra/CRA_CV_v2.yaml

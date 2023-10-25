@@ -8,13 +8,13 @@ occupancy = False
 lovasz_input = 'points'
 ce_input = 'voxel'
 
-point_cloud_range = [-51.2, -51.2, -5.0, 51.2, 51.2, 3.0]
+point_cloud_range = [-8, -8, -4.0, 8, 8, 4.0]
 
 _dim_ = 64
 num_heads = 4
 _pos_dim_ = [24, 24, 16]
 _ffn_dim_ = _dim_*2
-_num_levels_ = 4
+_num_levels_ = 4#4
 _num_cams_ = 8
 
 tpv_h_ = 160
@@ -24,8 +24,8 @@ scale_h = 1
 scale_w = 1
 scale_z = 1
 tpv_encoder_layers = 5
-num_points_in_pillar = [8, 16, 16]
-num_points = [8, 16, 16]
+num_points_in_pillar = [16, 32, 32]
+num_points = [16, 32, 32]
 hybrid_attn_anchors = 16
 hybrid_attn_points = 16
 hybrid_attn_init = 0
@@ -113,18 +113,19 @@ model = dict(
     ),
     img_backbone=dict(
         type='ResNet',
-        depth=101,
+        depth=18,
         num_stages=4,
         out_indices=(1, 2, 3),
         frozen_stages=1,
         norm_cfg=dict(type='BN2d', requires_grad=False),
         norm_eval=True,
         style='caffe',
-        dcn=dict(type='DCNv2', deform_groups=1, fallback_on_stride=False), # original DCNv2 will print log when perform load_state_dict
+        # dict(type='DCNv2', deform_groups=1, fallback_on_stride=False), # original DCNv2 will print log when perform load_state_dict
+        dcn=None,
         stage_with_dcn=(False, False, True, True)),
     img_neck=dict(
         type='FPN',
-        in_channels=[512, 1024, 2048],
+        in_channels=[128, 256, 512],
         out_channels=_dim_,
         start_level=0,
         add_extra_convs='on_output',

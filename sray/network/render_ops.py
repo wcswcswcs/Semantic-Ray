@@ -140,19 +140,21 @@ def project_points_directions(poses,points):
     dir = -dir / torch.clamp_min(torch.norm(dir, dim=2, keepdim=True), min=1e-5)  # rfn,pn,3
     return dir
 
-def project_points_ref_views(ref_imgs_info, que_points):
+def project_points_ref_views(ref_imgs_info, que_points,nb_views=-1):
     """
     :param ref_imgs_info:
     :param que_points:      pn,3
     :return:
     """
+    if nb_views ==-1:
+        nb_views = ref_imgs_info['imgs'].shape[0]
     prj_pts, prj_valid_mask, prj_depth = project_points_coords(
-        que_points, ref_imgs_info['poses'], ref_imgs_info['Ks']) # rfn,pn,2
-    h,w=ref_imgs_info['imgs'].shape[-2:]
+        que_points, ref_imgs_info['poses'][:nb_views], ref_imgs_info['Ks'][:nb_views]) # rfn,pn,2
+    h,w=ref_imgs_info['imgs'][:nb_views].shape[-2:]
     prj_img_invalid_mask = (prj_pts[..., 0] < -0.5) | (prj_pts[..., 0] >= w - 0.5) | \
                            (prj_pts[..., 1] < -0.5) | (prj_pts[..., 1] >= h - 0.5)
     valid_mask = prj_valid_mask & (~prj_img_invalid_mask)
-    prj_dir = project_points_directions(ref_imgs_info['poses'], que_points) # rfn,pn,3
+    prj_dir = project_points_directions(ref_imgs_info['poses'][:nb_views], que_points) # rfn,pn,3
     return prj_dir, prj_pts, prj_depth, valid_mask
 
 def project_points_dict(ref_imgs_info, que_pts):
@@ -215,6 +217,100 @@ def project_points_dict(ref_imgs_info, que_pts):
     for k, v in prj_dict.items():
         prj_dict[k]=v.reshape(rfn,qn,rn,dn,-1)
     return prj_dict
+
+def project_points_dict_v2(ref_imgs_info, que_pts,nb_views):
+    # project all points
+    qn, rn, dn, _ = que_pts.shape
+    prj_dir, prj_pts, prj_depth, prj_mask = project_points_ref_views(ref_imgs_info, que_pts.reshape([qn * rn * dn, 3]),nb_views)
+    rfn, _, h, w = ref_imgs_info['imgs'][:nb_views].shape
+    # prj_ray_feats = interpolate_feature_map(ref_imgs_info['ray_feats'], prj_pts, prj_mask, h, w)
+    prj_rgb = interpolate_feature_map(ref_imgs_info['imgs'][:nb_views], prj_pts, prj_mask, h, w)
+    
+    if 'sem_feats' in ref_imgs_info:
+        prj_sem_feats = interpolate_feature_map(ref_imgs_info['sem_feats'], prj_pts, prj_mask, h, w)
+        prj_dict = {
+            'dir': -1*prj_dir.reshape((rfn,rn, dn,-1)).permute(1,0,2,3),
+            'pts': prj_pts.reshape((rfn,rn, dn,-1)).permute(1,0,2,3),
+            'depth': prj_depth.reshape((rfn,rn, dn,-1)).permute(1,0,2,3),
+            'mask': prj_mask.float().reshape((rfn,rn, dn,-1)).permute(1,0,2,3),
+            # 'ray_feats': prj_ray_feats,
+            'rgb': prj_rgb.reshape((rfn,rn, dn,-1)).permute(1,0,2,3),
+            'sem_feats': prj_sem_feats,
+        }
+    else:
+        prj_dict = {
+            'dir':prj_dir.reshape((rfn,rn, dn,-1)).permute(1,0,2,3), 
+            'pts':prj_pts.reshape((rfn,rn, dn,-1)).permute(1,0,2,3), 
+            'depth':prj_depth.reshape((rfn,rn, dn,-1)).permute(1,0,2,3), 
+            'mask': prj_mask.float().reshape((rfn,rn, dn,-1)).permute(1,0,2,3), 
+            # 'ray_feats':prj_ray_feats, 
+            'rgb':prj_rgb.reshape((rfn,rn, dn,-1)).permute(1,0,2,3)}
+    ret = {}
+    if 'seg_logits' in ref_imgs_info:
+        
+        seg_logits = interpolate_feature_map(ref_imgs_info['seg_logits'][:nb_views], prj_pts, prj_mask, h, w)
+        ret['seg_logits'] = seg_logits.reshape((rfn,rn, dn,-1)).permute(1,0,2,3)
+    for key in [ 'pred_sem_seg','labels']:
+        if key in ref_imgs_info:
+            prj_dict[key] = interpolate_feature_map(
+                ref_imgs_info[key][:nb_views].float(), 
+                prj_pts, prj_mask, h, w,).reshape((rfn,rn, dn,-1)).permute(1,0,2,3)
+
+    if 'global_volume' in ref_imgs_info:
+        n_ref = ref_imgs_info['imgs'].shape[0]
+        aabb = ref_imgs_info['aabb']
+        min_ = aabb[0]
+        max_ = aabb[1]
+        qn,rn,dn,_  = que_pts.shape
+        ind = que_pts.reshape((-1,3)) #(qn rn dn) 3 qn:1
+        ind = (ind - min_)/(max_ - min_)
+        ind = ind*2-1.
+        global_volume = ref_imgs_info['global_volume'].permute(0,1,4,3,2)
+        global_volume_feats = F.grid_sample(global_volume,ind[None,None,None],mode='bilinear',align_corners=True)
+        global_volume_feats = global_volume_feats.reshape((rn,1,dn,-1)).repeat(1,n_ref,1,1)
+        ret['global_volume_feats'] = global_volume_feats # rn n_ref dn c
+    if 'tpv_hw' in ref_imgs_info:
+        n_ref = nb_views
+        aabb = ref_imgs_info['aabb']
+        min_ = aabb[0]
+        max_ = aabb[1]
+        qn,rn,dn,_  = que_pts.shape
+        ind = que_pts.reshape((-1,3)) #(qn rn dn) 3 qn:1
+        ind = (ind - min_)/(max_ - min_)
+        ind = ind*2-1.
+
+
+        tpv_hw = ref_imgs_info['tpv_hw']
+        tpv_zh = ref_imgs_info['tpv_zh']
+        tpv_wz = ref_imgs_info['tpv_wz']
+        ind_wh,ind_hz,ind_zw = ind[...,[0,1]],ind[...,[1,2]],ind[...,[2,0]]
+        tpv_hw_feat = F.grid_sample(tpv_hw,ind_wh[None,None],mode='bilinear',align_corners=True).permute(0,2,3,1)
+        tpv_zh_feat = F.grid_sample(tpv_zh,ind_hz[None,None],mode='bilinear',align_corners=True).permute(0,2,3,1)
+        tpv_wz_feat = F.grid_sample(tpv_wz,ind_zw[None,None],mode='bilinear',align_corners=True).permute(0,2,3,1)
+
+        ret['tpv_hw_feat'] = tpv_hw_feat.reshape((rn, dn,1,-1)).repeat(1,1,n_ref,1).permute(0,2,1,3)
+        ret['tpv_zh_feat'] = tpv_zh_feat.reshape((rn, dn,1,-1)).repeat(1,1,n_ref,1).permute(0,2,1,3)
+        ret['tpv_wz_feat'] = tpv_wz_feat.reshape((rn, dn,1,-1)).repeat(1,1,n_ref,1).permute(0,2,1,3)
+    if 'density_volume' in ref_imgs_info:
+        n_ref = ref_imgs_info['imgs'].shape[0]
+        aabb = ref_imgs_info['aabb']
+        min_ = aabb[0]
+        max_ = aabb[1]
+        qn,rn,dn,_  = que_pts.shape
+        ind = que_pts.reshape((-1,3)) #(qn rn dn) 3 qn:1
+        ind = (ind - min_)/(max_ - min_)
+        ind = ind*2-1.
+        density_volume = ref_imgs_info['density_volume'].permute(0,1,4,3,2)
+        density_coarse = F.grid_sample(density_volume,ind[None,None,None],mode='bilinear',align_corners=True)
+        density_coarse = density_coarse.reshape((rn,1,dn,-1)).repeat(1,n_ref,1,1)
+        ret['density_coarse'] = density_coarse # rn n_ref dn c
+    prj_dict.update(ret)
+
+    # post process
+    # for k, v in prj_dict.items():
+    #     prj_dict[k]=v.reshape(rfn,qn,rn,dn,-1)
+    return prj_dict
+
 
 def sample_depth(depth_range, coords, sample_num, random_sample):
     """

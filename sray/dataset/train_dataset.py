@@ -8,7 +8,8 @@ from sray.utils.base_utils import get_coords_mask, sample_patch
 from sray.utils.dataset_utils import set_seed
 from sray.utils.imgs_info import build_imgs_info, random_crop, random_flip, pad_imgs_info, imgs_info_slice, \
     imgs_info_to_torch
-from sray.utils.view_select import compute_nearest_camera_indices
+from sray.utils.view_select import compute_nearest_camera_indices,find_closest_and_remove,farthest_point_sampling
+from sray.utils.draw_utils import draw_aabb, draw_cam
 
 def select_train_ids_for_real_estate(img_ids):
     num_frames = len(img_ids)
@@ -100,7 +101,7 @@ class RendererDataset(Dataset):
         "aug_forward_crop_size": (400,600),
         "aug_pixel_center_sample": False,
         "aug_view_select_type": "easy",
-
+        
         "use_consistent_min_max": False,
         "revise_depth_range": False,
     }
@@ -192,7 +193,7 @@ class RendererDataset(Dataset):
                 raise NotImplementedError
 
         return dist_idx
-
+    
     def select_working_views(self, database, que_id, ref_ids):
         database_name = database.database_name
         dist_idx = compute_nearest_camera_indices(database, [que_id], ref_ids)[0]
@@ -212,6 +213,51 @@ class RendererDataset(Dataset):
             dist_idx = dist_idx[:self.cfg['min_wn']]
             ref_ids = ref_ids[dist_idx]
         return ref_ids
+    
+    def select_working_views_v2(self, database, que_id, ref_ids):
+        database_name = database.database_name
+        ref_ids = np.asarray(ref_ids)
+        ref_num = np.random.randint(self.cfg['min_wn'], self.cfg['max_wn'])
+        ref_poses = [database.get_pose(ref_id) for ref_id in ref_ids]
+        ref_cam_pts = np.asarray([-pose[:, :3].T @ pose[:, 3] for pose in ref_poses])
+        que_poses = [database.get_pose(que_id) for que_id in [que_id]]
+        que_cam_pts = np.asarray([-pose[:, :3].T @ pose[:, 3] for pose in que_poses])
+        # array1_expanded = ref_cam_pts[:, np.newaxis, :]
+        # array2_expanded = ref_cam_pts[np.newaxis, :, :]
+        # distances = np.sqrt(np.sum((array1_expanded - array2_expanded) ** 2, axis=2))
+        # import plotly.express  as px
+        # fig = px.imshow(distances)
+        # fig.write_html("distances.html")
+        ids = []
+
+        for i in range(ref_num):
+            closest_pt, closest_ind, vail_mask = find_closest_and_remove(que_cam_pts,ref_cam_pts)
+            que_cam_pts = np.append(que_cam_pts,np.array([closest_pt]),0)
+            ids.append(ref_ids[closest_ind])
+            ref_cam_pts = ref_cam_pts[vail_mask]
+            ref_ids = ref_ids[vail_mask]
+        
+        # fig = draw_aabb()
+        # fig = draw_cam(fig,np.asarray([-pose[:, :3].T @ pose[:, 3] for pose in que_poses]))
+        # fig = draw_cam(fig,que_cam_pts)
+        # fig.write_html("scene.html")
+        # dist_idx = compute_nearest_camera_indices(database, [que_id], ref_ids)[0]
+        # if self.is_train:
+        #     if np.random.random()>0.02: # 2% chance to include que image
+        #         dist_idx = dist_idx[ref_ids[dist_idx]!=que_id]
+        #     ref_num = np.random.randint(self.cfg['min_wn'], self.cfg['max_wn'])
+        #     dist_idx = self.select_working_views_impl(database_name,dist_idx,ref_num)
+        #     if not database_name.startswith('real_estate'):
+        #         # we already select working views for real estate dataset
+        #         np.random.shuffle(dist_idx)
+        #         dist_idx = dist_idx[:ref_num]
+        #         ref_ids = ref_ids[dist_idx]
+        #     else:
+        #         ref_ids = ref_ids[:ref_num]
+        # else:
+        #     dist_idx = dist_idx[:self.cfg['min_wn']]
+        #     ref_ids = ref_ids[dist_idx]
+        return ids
 
     def random_change_depth_range(self, depth_range):
         depth_range_new = depth_range.copy()
@@ -279,15 +325,16 @@ class RendererDataset(Dataset):
     def __getitem__(self, index):
         set_seed(index, self.is_train)
         database, que_id, ref_ids_all = self.get_database_ref_que_ids(index)
-        ref_ids = self.select_working_views(database, que_id, ref_ids_all)
+        # ref_ids = self.select_working_views(database, que_id, ref_ids_all)
+        ref_ids = self.select_working_views_v2(database, que_id, ref_ids_all)
         if self.cfg['use_src_imgs']:
             # src_imgs_info used in construction of cost volume
             ref_imgs_info, ref_cv_idx, ref_real_idx = build_src_imgs_info_select(database,ref_ids,ref_ids_all,self.cfg['cost_volume_nn_num'])
         else:
             ref_idx = compute_nearest_camera_indices(database, ref_ids)[:,1:4] # used in cost volume construction
             is_aligned = not database.database_name.startswith('space')
-            ref_imgs_info = build_imgs_info(database, ref_ids, -1, is_aligned)
-        que_imgs_info = build_imgs_info(database, [que_id], has_depth=self.is_train)
+            ref_imgs_info = build_imgs_info(database, ref_ids, -1, is_aligned,num_geo_src_views=self.cfg['num_geo_src_views'])
+        que_imgs_info = build_imgs_info(database, [que_id], has_depth=True,num_geo_src_views=1)
 
         if self.is_train:
             # data augmentation
