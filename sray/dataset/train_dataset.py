@@ -10,6 +10,7 @@ from sray.utils.imgs_info import build_imgs_info, random_crop, random_flip, pad_
     imgs_info_to_torch
 from sray.utils.view_select import compute_nearest_camera_indices,find_closest_and_remove,farthest_point_sampling
 from sray.utils.draw_utils import draw_aabb, draw_cam
+from sray.utils.utils import select_cameras
 
 def select_train_ids_for_real_estate(img_ids):
     num_frames = len(img_ids)
@@ -215,7 +216,7 @@ class RendererDataset(Dataset):
         return ref_ids
     
     def select_working_views_v2(self, database, que_id, ref_ids):
-        database_name = database.database_name
+
         ref_ids = np.asarray(ref_ids)
         ref_num = np.random.randint(self.cfg['min_wn'], self.cfg['max_wn'])
         ref_poses = [database.get_pose(ref_id) for ref_id in ref_ids]
@@ -325,8 +326,32 @@ class RendererDataset(Dataset):
     def __getitem__(self, index):
         set_seed(index, self.is_train)
         database, que_id, ref_ids_all = self.get_database_ref_que_ids(index)
-        # ref_ids = self.select_working_views(database, que_id, ref_ids_all)
-        ref_ids = self.select_working_views_v2(database, que_id, ref_ids_all)
+        if 'use_select_working_views_v2' in self.cfg and self.cfg['use_select_working_views_v2']:
+            target_num = int(que_id)
+            dataset = database
+            aabb = dataset.get_aabb().flatten()
+            target_w2c = dataset.w2cs[target_num]
+            target_c2w = dataset.c2ws[target_num]
+            target_k = dataset.get_K(0)
+            cam_ids = np.array(range(len(dataset.c2ws)))
+            w2cs = np.array(dataset.w2cs)
+            w2cs = np.delete(w2cs,target_num, axis=0)
+            c2ws = np.array(dataset.c2ws)
+            c2ws = np.delete(c2ws,target_num, axis=0)
+            cam_ids = np.delete(cam_ids,target_num, axis=0)
+            Ks = [target_k]*len(w2cs)
+            N1 = self.cfg['N1']
+            N2 = self.cfg['N2']
+            ref_ids = select_cameras(
+                            aabb,target_c2w,
+                            target_w2c,
+                            target_k,cam_ids,
+                            c2ws, w2cs,
+                            Ks, N1,N2)
+            # ref_ids = self.select_working_views_v2(database, que_id, ref_ids_all)
+        else:
+            ref_ids = self.select_working_views(database, que_id, ref_ids_all)
+        # ref_ids = self.select_working_views_v2(database, que_id, ref_ids_all)
         if self.cfg['use_src_imgs']:
             # src_imgs_info used in construction of cost volume
             ref_imgs_info, ref_cv_idx, ref_real_idx = build_src_imgs_info_select(database,ref_ids,ref_ids_all,self.cfg['cost_volume_nn_num'])

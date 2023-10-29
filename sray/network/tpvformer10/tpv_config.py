@@ -8,7 +8,7 @@ occupancy = False
 lovasz_input = 'points'
 ce_input = 'voxel'
 
-point_cloud_range = [-8, -8, -4.0, 8, 8, 4.0]
+point_cloud_range = [-4, -4, -2.0, 4, 4, 2.0]
 
 _dim_ = 64
 num_heads = 4

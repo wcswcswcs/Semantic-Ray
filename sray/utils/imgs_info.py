@@ -1,7 +1,9 @@
 import numpy as np
 import torch
+import sray.network.tpvformer10.tpv_config as tpv_config
+from sray.utils.base_utils import color_map_forward, pad_img_end,extract_variables_as_dict
 
-from sray.utils.base_utils import color_map_forward, pad_img_end
+
 
 def random_crop(ref_imgs_info, que_imgs_info, target_size):
     imgs = ref_imgs_info['imgs']
@@ -127,35 +129,36 @@ def build_imgs_info(database, ref_ids, pad_interval=-1, is_aligned=True, align_d
     # seg_logits = torch.stack(seg_logits,0)
     # pred_sem_seg  = torch.stack(pred_sem_seg,0)
     # mlvl_feats = torch.stack(mlvl_feats,1)
-
-    ref_poses = np.asarray([database.get_pose(ref_id) for ref_id in ref_ids], dtype=np.float32)
+    ref_ids = np.array(ref_ids).astype(int)
+    # ref_poses = np.asarray([database.get_pose(ref_id) for ref_id in ref_ids], dtype=np.float32)
+    ref_poses = np.asarray(database.w2cs[(ref_ids-1)], dtype=np.float32)
+    ref_c2ws = np.asarray(database.c2ws[ref_ids-1], dtype=np.float32)
     ref_Ks = np.asarray([database.get_K(ref_id) for ref_id in ref_ids], dtype=np.float32)
     ref_depth_range = np.asarray([database.get_depth_range(ref_id) for ref_id in ref_ids], dtype=np.float32)
     if align_depth_range:
         ref_depth_range[:,0]=np.min(ref_depth_range[:,0])
         ref_depth_range[:,1]=np.max(ref_depth_range[:,1])
 
-    
+    aabb = database.get_aabb()
 
     ref_imgs_info = {
         'imgs_mmseg':ref_imgs_mmseg,
         'seg_logits':seg_logits,
-        # 'pred_sem_seg':pred_sem_seg,
-        # 'mlvl_feats':mlvl_feats,
-        
-        # 'affine_mats':, #w2c2i
-        # 'affine_mats_inv':,
-        # 'near_fars':,
-        # 'closest_idxs':,
-        # 'depths_aug':,
-
         'imgs': ref_imgs,
         'norm_imgs': ref_imgs_norm, 
         'poses': ref_poses, 
+        'w2cs':ref_poses,
+        'c2ws':ref_c2ws,
         'Ks': ref_Ks, 
+        'intrinsics':ref_Ks,
+        'origin':aabb[0],
+        'voxel_size':aabb[1]-aabb[0],
+        'aabb':aabb,
         'depth_range': ref_depth_range, 
+        'near_fars' : ref_depth_range,
         'masks': ref_masks, 
-        'labels': ref_labels}
+        'labels': ref_labels
+        }
     # if has_depth: ref_imgs_info['depth'] = ref_depths
     ref_imgs_info['depth'] = ref_depths
     if pad_interval!=-1:
@@ -166,18 +169,29 @@ def build_imgs_info(database, ref_ids, pad_interval=-1, is_aligned=True, align_d
     return ref_imgs_info
 
 def build_img_metas(ref_img_info,img_H = 280,img_W = 320):
-
+    tpv_cfg = extract_variables_as_dict(tpv_config)
+    pc_range = np.asarray(tpv_cfg['point_cloud_range'])
     img_metas=[]
     d = {
         'img_shape' : [[img_H, img_W]],
     }
     img_metas = []
+    aabb = ref_img_info['aabb']
     for pose,k in zip(ref_img_info['poses'],ref_img_info['Ks']):
         lidar2cam_rt = np.eye(4)
         lidar2cam_rt[:3, :4] = pose[:3,:4]
         intrinsic = np.eye(4)
         intrinsic[:k.shape[0], :k.shape[1]] = k
-        lidar2img = intrinsic  @ lidar2cam_rt
+        
+        t1 = np.eye(4)
+        t1[:3,3] = -pc_range[:3]
+        t2 = np.eye(4)
+        t2[:3,3] = aabb[0]
+        r = np.eye(4)
+        r[0,0] = (aabb[1][0] - aabb[0][0])/(pc_range[3]-pc_range[0])
+        r[1,1] = (aabb[1][1] - aabb[0][1])/(pc_range[4]-pc_range[1])
+        r[2,2] = (aabb[1][2] - aabb[0][2])/(pc_range[5]-pc_range[2])
+        lidar2img = intrinsic @ lidar2cam_rt @t2 @ r @ t1
         ret = d.copy()
         ret['lidar2img'] = lidar2img
         img_metas.append(ret)
@@ -186,24 +200,16 @@ def build_img_metas(ref_img_info,img_H = 280,img_W = 320):
 def build_info_for_geo(ref_img_info,num_src_views):
     affine_mats, affine_mats_inv = [], []
     depths, depths_h, depths_aug = [], [], []
-    intrinsics, w2cs, c2ws, near_fars = [], [], [], []
-    near_far = [0.1, 10.0]
+    c2ws = ref_img_info['c2ws']
     h = 240
     w = 320
-    # num_src_views = len(ref_img_info['poses'])
     for vid in range(num_src_views):
 
         
         w2c = ref_img_info['poses'][vid]
-        w2c_ = np.eye(4)
-        w2c_[:3,:4] = w2c
-        w2cs.append(w2c_)
-        c2w = np.linalg.inv(w2c_)
-        c2ws.append(c2w)
         aff = []
         aff_inv = []
         intrinsic = ref_img_info['Ks'][vid]
-        intrinsics.append(intrinsic)
 
         for l in range(3):
             proj_mat_l = np.eye(4)
@@ -217,13 +223,10 @@ def build_info_for_geo(ref_img_info,num_src_views):
         affine_mats.append(aff)
         affine_mats_inv.append(aff_inv)
 
-        near_fars.append(near_far)
         depths_h.append(np.zeros([h, w]))
         depths.append(np.zeros([h // 4, w // 4]))
         depths_aug.append(np.zeros([h // 4, w // 4]))
-    intrinsics = np.stack(intrinsics)
-    w2cs = np.stack(w2cs)
-    c2ws = np.stack(c2ws)
+
     closest_idxs = []
     for pose in c2ws:
         ids = get_nearest_pose_ids(
@@ -235,20 +238,18 @@ def build_info_for_geo(ref_img_info,num_src_views):
     affine_mats_inv = np.stack(affine_mats_inv)
     depths_h = np.stack(depths_h)
     depths_aug = np.stack(depths_aug)
-    affine_mats = np.stack(affine_mats)
-    affine_mats_inv = np.stack(affine_mats_inv)
-    near_fars = np.stack(near_fars)
+
 
     
     ref_img_info["depths"] = depths
     ref_img_info["depths_h"] = depths_h
     ref_img_info["depths_aug"] = depths_aug
-    ref_img_info["w2cs"] = w2cs.astype("float32")
-    ref_img_info["c2ws"] = c2ws.astype("float32")
-    ref_img_info["near_fars"] = near_fars
+    # ref_img_info["w2cs"] = w2cs.astype("float32")
+    # ref_img_info["c2ws"] = c2ws.astype("float32")
+    # ref_img_info["near_fars"] = near_fars
     ref_img_info["affine_mats"] = affine_mats
     ref_img_info["affine_mats_inv"] = affine_mats_inv
-    ref_img_info["intrinsics"] = intrinsics.astype("float32")
+    # ref_img_info["intrinsics"] = intrinsics.astype("float32")
     ref_img_info["closest_idxs"] = closest_idxs
     
     

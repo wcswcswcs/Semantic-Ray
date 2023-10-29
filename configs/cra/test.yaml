@@ -2,7 +2,7 @@ name: test
 project_name: sray
 
 # network
-use_tpvformer: true
+use_tpvformer: false
 init_net_type: depth
 use_hierarchical_sampling: false
 use_depth_loss: false
@@ -15,7 +15,7 @@ render_label: true
 num_classes: 20
 ignore_label: 20
 agg_net_cfg: {
-  network_name: CRANet_CV_IBR,
+  network_name: CRANet_CV_IBR_v2,
   label_hidden: [16],
   num_classes: 20,
   use_ptrans: true,
@@ -31,7 +31,7 @@ loss: [render, semantic_v2, ref_depth, depth]
 render_loss_scale: 0.75
 semantic_loss_scale: 0.25
 ref_depth_scale: 0.1
-label_loss_scale: 0.1
+label_loss_scale: 0.5
 depth_loss_scale: 0.1
 semantic_loss_2d_scale: 0.
 val_metric: [psnr_ssim, vis_img, iou, vis_sem]
@@ -65,7 +65,10 @@ train_dataset_cfg:
   train_ray_num:  1024 #32*32*N_patch
   use_patch: false
   patch_size: [32,32]
-  num_geo_src_views: 4
+  num_geo_src_views: 8
+  use_select_working_views_v2: true
+  N1: 3
+  N2: 5
 val_set_list: configs/scannetv2_val_split.txt
 
 semantic_color_map: [
@@ -104,3 +107,36 @@ origin : [.0, .0, .5]
 M2F:
   config_file : '/home/chengshun.wang/pjs/mmsegmentation/m2f_pt/mask2former_r50_scannet_2d_240x320_pretrain.py'
   checkpoint_file : '/home/chengshun.wang/pjs/mmsegmentation/m2f_pt/best_mIoU_iter_85000.pth'
+
+# geonerf
+# nb_views: 5
+
+# DAT:
+#     final_output: False
+#     down_projs: True
+#     img_size: [80,60]
+#     patch_size: 1
+#     num_classes: 21
+#     in_dim: 32
+#     expansion: 4
+#     dim_stem: 96
+#     dims: [96, 192]
+#     depths: [2, 4, 18, 2]
+#     stage_spec: [[N, D], [N, D, N, D], ]
+#     heads: [3, 6, 12, 24]
+#     window_sizes: [7, 7, 7, 7]
+#     groups: [1, 2, 3, 6]
+#     use_pes: [True, True, True, True]
+#     dwc_pes: [False, False, False, False]
+#     strides: [8, 4, 2, 1]
+#     offset_range_factor: [-1, -1, -1, -1]
+#     no_offs: [False, False, False, False]
+#     fixed_pes: [False, False, False, False]
+#     use_dwc_mlps: [True, True, True, True]
+#     use_lpus: [True, True, True, True]
+#     use_conv_patches: False
+#     ksizes: [9, 7, 5, 3]
+#     nat_ksizes: [7, 7, 7, 7]
+#     drop_rate: 0.0
+#     attn_drop_rate: 0.0
+#     drop_path_rate: 0.4

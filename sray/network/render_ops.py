@@ -4,11 +4,7 @@ from sray.network.ops import interpolate_feats
 import einops
 import os
 from torch.utils.cpp_extension import load
-cuda_dir = os.path.join(os.path.dirname(__file__), "cuda")
-raymarch_kernel = load(name='raymarch_kernel',
-                       extra_cuda_cflags=[],
-                       sources=[f'{cuda_dir}/raymarcher.cpp',
-                                f'{cuda_dir}/raymarcher.cu'])
+
 from torch.autograd import Function
 from torch.cuda.amp import custom_bwd, custom_fwd
 
@@ -364,6 +360,11 @@ def sample_depth_from_density_volume(density_volume, que_imgs_info, depth_sample
     :param random_sample:
     :return:
     """
+    cuda_dir = os.path.join(os.path.dirname(__file__), "cuda")
+    raymarch_kernel = load(name='raymarch_kernel',
+                        extra_cuda_cflags=[],
+                        sources=[f'{cuda_dir}/raymarcher.cpp',
+                                    f'{cuda_dir}/raymarcher.cu'])
     (depth_range, coords, poses,Ks,aabb) = (
                                         que_imgs_info['depth_range'], 
                                         que_imgs_info['coords'], 

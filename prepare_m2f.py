@@ -10,7 +10,7 @@ from skimage.io import imread
 
 cfg = {
     'config_file' : '/home/chengshun.wang/pjs/mmsegmentation/m2f_pt/mask2former_r50_scannet_2d_240x320_pretrain.py',
-'checkpoint_file' : '/home/chengshun.wang/pjs/mmsegmentation/m2f_pt/best_mIoU_iter_85000.pth',
+'checkpoint_file' : '/home/chengshun.wang/pjs/mmsegmentation/m2f_pt/best_mIoU_iter_110000.pth',
 }
 model = get_m2f(cfg)
 def get_img_id_from_img_path(img_path):

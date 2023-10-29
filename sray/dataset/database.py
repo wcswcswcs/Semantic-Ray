@@ -12,6 +12,8 @@ import torch
 from sray.utils.base_utils import downsample_gaussian_blur, pose_inverse
 from sray.dataset.semantic_utils import PointSegClassMapping
 from torchvision import transforms as T
+from plyfile import PlyData
+
 
 class BaseDatabase(abc.ABC):
     def __init__(self, database_name):
@@ -73,11 +75,19 @@ class ScannetDatabase(BaseDatabase):
         self.K = K
 
         self.img_ids = []
+        self.w2cs = []
+        self.c2ws = []
         for i, rgb_path in enumerate(rgb_paths):
-            pose = self.get_pose(i)
-            if np.isinf(pose).any() or np.isnan(pose).any():
-                continue
+            pose = self._get_pose(i)
+            # if np.isinf(pose).any() or np.isnan(pose).any():
+            #     continue
             self.img_ids.append(f'{i}')
+            self.w2cs.append(pose)
+            tmp = np.eye(4)
+            tmp[:3,:] = pose
+            self.c2ws.append(np.linalg.inv(tmp)[:3,:])
+        self.w2cs = np.asarray(self.w2cs)
+        self.c2ws = np.asarray(self.c2ws)
 
         self.img_id2imgs = {}
         # self.img_id2imgs_mmseg = {}
@@ -139,23 +149,63 @@ class ScannetDatabase(BaseDatabase):
         return self.K.astype(np.float32)
     
     def get_axis_align_matrix(self):
-        meta_file = os.path.join(self.root_dir, f"{self.scene_name}.txt")
-        lines = open(meta_file).readlines()
-        axis_align_matrix = None
-        for line in lines:
-            if 'axisAlignment' in line:
-                axis_align_matrix = [float(x) for x in line.rstrip().strip('axisAlignment = ').split(' ')]
+        if getattr(self,'axis_align_matrix',None) is None:
+            meta_file = os.path.join(self.root_dir, f"{self.scene_name}.txt")
+            lines = open(meta_file).readlines()
+            axis_align_matrix = None
+            for line in lines:
+                if 'axisAlignment' in line:
+                    axis_align_matrix = [float(x) for x in line.rstrip().strip('axisAlignment = ').split(' ')]
 
-        if axis_align_matrix != None:
-            axis_align_matrix = np.array(axis_align_matrix).reshape((4, 4)) # 转换偏移矩阵
-        return axis_align_matrix
+            if axis_align_matrix != None:
+                axis_align_matrix = np.array(axis_align_matrix).reshape((4, 4)) # 转换偏移矩阵
+            self.axis_align_matrix = axis_align_matrix
+            return axis_align_matrix
+        else:
+            return self.axis_align_matrix
+        
 
-
+    def get_w2c(self, img_id):
+        return self.w2cs[int(img_id)-1]
+    
+    def get_c2w(self, img_id):
+        return self.c2ws[int(img_id)-1]
+    
+    def get_aabb(self):
+        aabb_file = os.path.join(self.root_dir,f'aabb.py')
+        if os.path.exists(aabb_file):
+            aabb = np.load(aabb_file)
+            return aabb
+        else:
+            filename = os.path.join(self.root_dir, f"{self.scene_name}_vh_clean_2.ply")
+            with open(filename, 'rb') as f:
+                plydata = PlyData.read(f)
+                num_verts = plydata['vertex'].count
+                vertices = np.zeros(shape=[num_verts, 3], dtype=np.float32)
+                vertices[:, 0] = plydata['vertex'].data['x']
+                vertices[:, 1] = plydata['vertex'].data['y']
+                vertices[:, 2] = plydata['vertex'].data['z']
+            axis_align_matrix = self.get_axis_align_matrix()
+            pts = np.ones((vertices.shape[0], 4))
+            pts[:, 0:3] = vertices[:, :3]
+            # pts = (axis_align_matrix @ pts)[:,:3]
+            pts = np.dot(pts, axis_align_matrix.transpose())[:,:3]
+            aabb = np.array([np.min(pts,0),np.max(pts,0)])
+            np.save(aabb_file,aabb)
+            return aabb
+    
     def get_pose(self, img_id):
+        return self.get_w2c(img_id)
+        # m  =self.get_axis_align_matrix()
+        # pose = np.loadtxt(
+        #     f'{self.root_dir}/pose/{int(img_id)}.txt').reshape([4, 4])
+        # pose = pose_inverse((m@pose)[:3, :])
+        # return pose.copy()
+    def _get_pose(self, img_id):
         m  =self.get_axis_align_matrix()
         pose = np.loadtxt(
-            f'{self.root_dir}/pose/{int(img_id)}.txt').reshape([4, 4])
-        pose = pose_inverse((m@pose)[:3, :])
+            f'{self.root_dir}/pose/{int(img_id)}.txt').reshape([4, 4]) #c2w
+        pose = pose_inverse((m@pose)[:3, :]) #w2c
         return pose.copy()
 
     def get_img_ids(self, check_depth_exist=False):

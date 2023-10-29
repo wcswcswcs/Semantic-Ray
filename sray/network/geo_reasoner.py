@@ -309,7 +309,7 @@ class CasMVSNet(nn.Module):
     def build_cost_volumes(self, feats, affine_mats, affine_mats_inv, depth_values, idx, spikes):
         B, V, C, H, W = feats.shape
         D = depth_values.shape[1]
-
+        idx = idx.cpu().numpy().tolist()
         ref_feats, src_feats = feats[:, idx[0]], feats[:, idx[1:]]
         src_feats = src_feats.permute(1, 0, 2, 3, 4)  # (V-1, B, C, h, w)
 
@@ -453,7 +453,7 @@ class CasMVSNet(nn.Module):
         depth_values = {"level_0": [], "level_1": [], "level_2": []}
         ## Create cost volumes for each view
         for i in range(0, V):
-            permuted_idx = torch.tensor(closest_idxs[0, i]).cuda()
+            permuted_idx = closest_idxs[0, i].clone().detach().cuda()
 
             init_depth_min = near_far[0, i, 0]
             depth_interval = (

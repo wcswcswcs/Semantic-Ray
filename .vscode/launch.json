@@ -17,7 +17,7 @@
             "name": "Python: Training",
             "type": "python",
             "request": "launch",
-            "env": {"CUDA_VISIBLE_DEVICES": "3" , "CUDA_LAUNCH_BLOCKING" : "1"},
+            "env": {"CUDA_VISIBLE_DEVICES": "3" ,"CUDA_LAUNCH_BLOCKING":"1"},
             "program": "${workspaceFolder}/run_training.py",
             "args": [
                 "--cfg",

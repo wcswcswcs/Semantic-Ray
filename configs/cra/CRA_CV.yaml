@@ -66,6 +66,7 @@ train_dataset_cfg:
   use_patch: false
   patch_size: [32,32]
   num_geo_src_views: 4
+  use_select_working_views_v2: true 
 val_set_list: configs/scannetv2_val_split.txt
 
 semantic_color_map: [

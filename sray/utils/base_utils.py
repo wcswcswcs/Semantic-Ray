@@ -889,3 +889,8 @@ def erode_mask(tensor: Float[Tensor, "bs 1 H W"], pixel_radius: int = 1):
     """
     kernel_size = 1 + 2 * pixel_radius
     return erode(tensor, kernel_size=kernel_size)
+
+def extract_variables_as_dict(module):
+    # 过滤模块的内置属性
+    attrs = [attr for attr in dir(module) if not attr.startswith("__") and not callable(getattr(module, attr))]
+    return {attr: getattr(module, attr) for attr in attrs}

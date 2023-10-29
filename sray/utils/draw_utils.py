@@ -272,17 +272,25 @@ def draw_aabb(aabb_min = [-2.7, -2.7, -0.78],aabb_max = [3.7, 3.7, 1.78]):
         line=dict(color='red'),
         name='AABB'
     ))
+    fig.add_trace(go.Scatter3d(
+        x=[aabb_min[0], aabb_max[0]],
+        y=[aabb_min[1],aabb_max[1]],
+        z=[aabb_min[2],aabb_max[2]],
+        mode='markers',
+        marker=dict(color='yellow',size=10),
+        name='AABB'
+    ))
     return fig
 
 
-def draw_cam(fig,cams):
+def draw_cam(fig,cams,color='blue'):
     camera_x, camera_y, camera_z = zip(*cams)
     fig.add_trace(go.Scatter3d(
         x=camera_x,
         y=camera_y,
         z=camera_z,
         mode='markers',
-        marker=dict(size=5, color='blue'),
+        marker=dict(size=5, color=color),
         name='Camera Positions'
     ))
 

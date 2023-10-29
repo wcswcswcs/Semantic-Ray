@@ -252,10 +252,11 @@ class SemanticLoss_v2(Loss):
         pixel_label_gt = data_pr['pixel_label_gt']
         pixel_label_nr = data_pr['pixel_label_nr']
         sem_out = data_pr['sem_out']
-        d = (pixel_label_gt-sem_out).abs()
-        label_loss = torch.mean(d.gt(1.).float()).unsqueeze(0)* self.cfg.get('label_loss_scale',0.)
-        mask = (d>1.).detach()[0,:,0]
-        coarse_loss = compute_loss(pixel_label_nr, pixel_label_gt,mask=None)
+        # d = (pixel_label_gt-sem_out).abs()
+        # label_loss = torch.mean(d.gt(1.).float()).unsqueeze(0)* self.cfg.get('label_loss_scale',0.)
+        # mask = (d>1.).detach()[0,:,0]
+        # coarse_loss = compute_loss(pixel_label_nr, pixel_label_gt,mask)
+        coarse_loss = compute_loss(pixel_label_nr, pixel_label_gt)
         
         if 'pixel_label_gt_fine' in data_pr:
             pixel_label_gt_fine = data_pr['pixel_label_gt_fine']
@@ -267,7 +268,7 @@ class SemanticLoss_v2(Loss):
         loss = (coarse_loss + fine_loss) * self.cfg['semantic_loss_scale']
         ret ={
             'loss_semantic': loss,
-            'loss_label':label_loss
+            # '_loss_label':label_loss
             }
         if 'ref_sem_pred' in data_pr:
             ref_labels_pr = data_pr['ref_sem_pred'].permute(0, 2, 3, 1)
